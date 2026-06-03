@@ -68,22 +68,39 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .summary-card .kpi .val { font-size: 17px; }
 
   /* Collapse entry table into 4-col compact grid on mobile */
-  .entry-table thead { display: none; }
   .entry-table, .entry-table tbody, .entry-table tr { display: block; }
   .entry-table tr {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: 4px;
     padding: 8px;
-    border-bottom: 1px solid #e0e0e0;
     align-items: center;
   }
-  .entry-table th.loc-header {
+  /* Location header row */
+  .entry-table thead { display: block; }
+  .entry-table thead tr { display: block; }
+  .entry-table thead tr:first-child {
     display: block;
-    grid-column: 1 / -1;
-    padding: 8px 6px;
-    font-size: 12px;
+    padding: 10px 8px;
+    background: #1a1a2e;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: left;
+    border-radius: 6px 6px 0 0;
+    margin-top: 6px;
   }
+  .entry-table thead tr:first-child th {
+    display: block;
+    background: transparent;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 0;
+    border: none;
+  }
+  .entry-table thead tr:last-child { display: none; }
+  .entry-table tbody tr { border-bottom: 1px solid #e0e0e0; }
   .entry-table td { padding: 3px 4px; border: none; }
   /* Row 1: Category + Coins + Notes + Total */
   .entry-table td:nth-child(1) { grid-row: 1; grid-column: 1; font-weight: 600; font-size: 13px; display: flex; align-items: center; }
@@ -354,7 +371,7 @@ function renderForm() {
 
   let html = '';
   for (const loc of config.locations) {
-    html += `<div class="table-scroll"><table class="tbl entry-table"><thead><tr><th colspan="8" class="loc-header" style="background:#1a1a2e;">${loc.name}</th></tr>
+    html += `<div class="table-scroll"><table class="tbl entry-table"><thead><tr class="loc-header-row"><th colspan="8" class="loc-header">${loc.name}</th></tr>
     <tr><th style="width:80px;text-align:left;">Category</th><th>Coins (£)</th><th>Notes (£)</th><th>Total</th><th>MGD (20%)</th><th style="width:60px;text-align:center;">Split</th><th>Supplier Share</th><th>Cash left</th></tr></thead><tbody>`;
 
     for (const cat of loc.categories) {
