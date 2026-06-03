@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>The List - Daily Takings</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+.nav { display: flex; background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 0 20px; position: sticky; top: 0; z-index: 100; }
+.nav a { color: #a0a0b8; text-decoration: none; padding: 16px 24px; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; cursor: pointer; }
+.nav a:hover { color: #fff; }
+.nav a.active { color: #fff; border-bottom-color: #667eea; }
+.page { display: none; padding: 20px; max-width: 1200px; margin: 0 auto; }
+.page.active { display: block; }
+h1 { font-size: 22px; margin-bottom: 16px; color: #1a1a2e; }
+h2 { font-size: 16px; margin: 16px 0 8px; color: #16213e; }
+.form-header { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.form-header label { font-weight: 500; font-size: 14px; }
+.form-header input[type="date"] { padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.tbl th { background: #16213e; color: white; padding: 8px 10px; text-align: left; font-weight: 500; font-size: 12px; white-space: nowrap; }
+.tbl td { padding: 6px 10px; border-bottom: 1px solid #eee; }
+.tbl tr:hover { background: #f8f9ff; }
+.tbl .sub { background: #fafbfc; }
+.tbl input[type="number"] { width: 90px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; text-align: right; }
+.tbl input[type="number"]:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 2px rgba(102,126,234,.2); }
+.tbl .ro { color: #666; text-align: right; padding-right: 12px; font-variant-numeric: tabular-nums; }
+.tbl .loc-name { font-weight: 600; color: #16213e; }
+.btn { padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500; }
+.btn-primary { background: #667eea; color: white; }
+.btn-primary:hover { background: #5a6fd6; }
+.btn-success { background: #48bb78; color: white; }
+.btn-success:hover { background: #38a169; }
+.btn-danger { background: #fc8181; color: white; }
+.btn-danger:hover { background: #f56565; }
+.btn-outline { background: transparent; border: 1px solid #667eea; color: #667eea; }
+.btn-outline:hover { background: #667eea; color: white; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.msg { padding: 10px 16px; border-radius: 6px; margin-bottom: 12px; display: none; }
+.msg.success { background: #c6f6d5; color: #22543d; display: block; }
+.msg.error { background: #fed7d7; color: #822727; display: block; }
+.summary-card { background: white; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.summary-card .kpi { display: inline-block; margin-right: 32px; }
+.summary-card .kpi .val { font-size: 22px; font-weight: 700; color: #667eea; }
+.summary-card .kpi .lbl { font-size: 12px; color: #888; }
+.month-select { padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.settings-card { background: white; border-radius: 8px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.settings-card h3 { font-size: 14px; margin-bottom: 8px; }
+.settings-card label { display: block; font-size: 13px; margin: 4px 0; }
+.settings-card input { width: 80px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.empty-state { text-align: center; padding: 40px; color: #888; }
+.empty-state p { font-size: 15px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a class="active" onclick="showPage('entry')">Daily Entry</a>
+  <a onclick="showPage('history')">History</a>
+  <a onclick="showPage('monthly')">Monthly Summary</a>
+  <a onclick="showPage('settings')">Settings</a>
+</div>
+
+<div id="page-entry" class="page active">
+  <h1>Daily Takings Entry</h1>
+  <div class="form-header">
+    <label>Date:</label>
+    <input type="date" id="entryDate">
+    <button class="btn btn-primary" onclick="submitEntry()">Submit</button>
+    <button class="btn btn-outline" onclick="resetForm()">Reset</button>
+    <span id="submitMsg" class="msg"></span>
+  </div>
+
+  <div id="formContainer"></div>
+</div>
+
+<div id="page-history" class="page">
+  <h1>Submission History</h1>
+  <div class="toolbar">
+    <button class="btn btn-success" onclick="exportCSV()">Export CSV</button>
+    <button class="btn btn-danger" onclick="clearHistory()">Clear All</button>
+    <span id="historyCount" style="font-size:14px;color:#888;margin-left:8px;"></span>
+  </div>
+  <div id="historyTable"></div>
+</div>
+
+<div id="page-monthly" class="page">
+  <h1>Monthly Summary</h1>
+  <div class="toolbar">
+    <select id="monthSelect" class="month-select" onchange="showMonthlySummary()"></select>
+  </div>
+  <div id="monthlySummary"></div>
+  <div id="monthlyChart" style="height:400px;"></div>
+</div>
+
+<div id="page-settings" class="page">
+  <h1>Settings</h1>
+  <p style="font-size:13px;color:#888;margin-bottom:12px;">Configure revenue split rates per location and category.</p>
+  <div id="settingsContainer" class="settings-grid"></div>
+  <div style="margin-top:16px;">
+    <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+    <span id="settingsMsg" class="msg"></span>
+  </div>
+</div>
+
+<script>
+// ===== DATA / STATE =====
+const DEFAULT_CONFIG = {
+  locations: [
+    {
+      name: 'Albert Telford', categories: [
+        { name: 'Reels', rate: 0.6, hasPool: true, poolRent: 100 },
+        { name: 'Digital', rate: 0.5, hasPool: false }
+      ]
+    },
+    {
+      name: 'Albert Shrew', categories: [
+        { name: 'Reels', rate: 0.6, hasPool: false },
+        { name: 'Digital', rate: 0.5, hasPool: false }
+      ]
+    },
+    {
+      name: 'Fusion', categories: [
+        { name: 'Reel', rate: 0.5, hasPool: true, poolRent: 0 },
+        { name: 'Digital', rate: 0.5, hasPool: false }
+      ]
+    },
+    {
+      name: 'Coolock', categories: [
+        { name: 'Reels', rate: 0.6, hasPool: false },
+        { name: 'Digital', rate: 0.5, hasPool: false }
+      ]
+    },
+    {
+      name: 'Next Door Bar', categories: [
+        { name: 'Reels', rate: 0.5, hasPool: false }
+      ]
+    }
+  ]
+};
+
+let config;
+
+function loadConfig() {
+  const saved = localStorage.getItem('list_config');
+  if (saved) {
+    config = JSON.parse(saved);
+  } else {
+    config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  }
+}
+
+function saveConfig() {
+  localStorage.setItem('list_config', JSON.stringify(config));
+}
+
+function getDateStr(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function todayStr() {
+  return getDateStr(new Date());
+}
+
+// ===== ENTRIES =====
+function getEntries() {
+  try { return JSON.parse(localStorage.getItem('list_entries') || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveEntries(entries) {
+  localStorage.setItem('list_entries', JSON.stringify(entries));
+}
+
+// ===== CALCULATIONS =====
+function calcCategory(coins, notes, rate) {
+  const c = parseFloat(coins) || 0;
+  const n = parseFloat(notes) || 0;
+  const total = c + n;
+  const mgd = total * 0.2;
+  const cashLeft = total * rate;
+  const supplierShare = total - cashLeft;
+  return { total: round(total), mgd: round(mgd), supplierShare: round(supplierShare), cashLeft: round(cashLeft) };
+}
+
+function round(v) { return Math.round(v * 100) / 100; }
+
+// ===== RENDER FORM =====
+function renderForm() {
+  const container = document.getElementById('formContainer');
+  const date = document.getElementById('entryDate');
+  if (!date.value) date.value = todayStr();
+
+  let html = '';
+  for (const loc of config.locations) {
+    html += `<table class="tbl"><thead><tr><th colspan="6" style="background:#1a1a2e;">${loc.name}</th></tr>`;
+    html += `<tr><th style="width:100px;">Category</th><th>Coins (£)</th><th>Notes (£)</th><th>Total</th><th>MGD (20%)</th><th style="width:80px;">Rate</th><th>Supplier Share</th><th>Cash left</th></tr></thead><tbody>`;
+
+    for (const cat of loc.categories) {
+      const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
+      html += `<tr>
+        <td><strong>${cat.name}</strong></td>
+        <td><input type="number" step="any" id="coins_${id}" oninput="updateCat('${id}', ${cat.rate})" placeholder="0"></td>
+        <td><input type="number" step="any" id="notes_${id}" oninput="updateCat('${id}', ${cat.rate})" placeholder="0"></td>
+        <td class="ro" id="total_${id}">0.00</td>
+        <td class="ro" id="mgd_${id}">0.00</td>
+        <td style="font-size:12px;color:#888;">${(cat.rate * 100).toFixed(0)}% / ${((1 - cat.rate) * 100).toFixed(0)}%</td>
+        <td class="ro" id="ss_${id}">0.00</td>
+        <td class="ro" id="cl_${id}">0.00</td>
+      </tr>`;
+
+      if (cat.hasPool) {
+        html += `<tr class="sub">
+          <td><strong>Pool</strong></td>
+          <td colspan="2"><input type="number" step="any" id="pool_${id}" oninput="updatePool('${id}', ${cat.poolRent || 0})" placeholder="Gross" style="width:120px;"></td>
+          <td class="ro" id="poolTotal_${id}">0.00</td>
+          <td class="ro" id="poolMGD_${id}">-</td>
+          <td></td>
+          <td class="ro" id="poolSS_${id}">0.00</td>
+          <td class="ro" id="poolCL_${id}">0.00</td>
+        </tr>`;
+      }
+    }
+
+    html += '</tbody></table>';
+  }
+
+  // Grand Total section
+  html += `<table class="tbl"><thead><tr><th colspan="6" style="background:#1a1a2e;">Grand Totals</th></tr>
+    <tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
+  for (const loc of config.locations) {
+    const id = loc.name.replace(/\s+/g, '_');
+    html += `<tr><td>${loc.name}</td>
+      <td class="ro" id="gt_total_${id}">0.00</td>
+      <td class="ro" id="gt_mgd_${id}">0.00</td>
+      <td class="ro" id="gt_ss_${id}">0.00</td>
+      <td class="ro" id="gt_cl_${id}">0.00</td>
+      <td class="ro" id="gt_pool_${id}">0.00</td>
+    </tr>`;
+  }
+  html += `<tr style="font-weight:700;background:#f0f2ff;">
+    <td>GRAND TOTAL</td>
+    <td class="ro" id="grand_total">0.00</td>
+    <td class="ro" id="grand_mgd">0.00</td>
+    <td class="ro" id="grand_ss">0.00</td>
+    <td class="ro" id="grand_cl">0.00</td>
+    <td class="ro" id="grand_pool">0.00</td>
+  </tr>`;
+  html += '</tbody></table>';
+
+  // Bottom settlement section
+  html += `<table class="tbl"><thead><tr><th colspan="4" style="background:#1a1a2e;">Settlement (partner pays - negative means they owe us)</th></tr>
+    <tr><th>Party</th><th>Partner's Pay</th><th>Label</th><th>Our Cut</th></tr></thead><tbody>
+    <tr><td>Dan</td><td><input type="number" step="any" id="settle_dan" value="0" style="width:100px;"></td><td>Dans Pay</td><td class="ro" id="settle_dan_our">0.00</td></tr>
+    <tr><td>Fusion</td><td><input type="number" step="any" id="settle_fusion" value="0" style="width:100px;"></td><td>Fusion Pay</td><td class="ro" id="settle_fusion_our">0.00</td></tr>
+    <tr><td>Coolock</td><td><input type="number" step="any" id="settle_coolock" value="0" style="width:100px;"></td><td>Lees Cut</td><td class="ro" id="settle_coolock_our">0.00</td></tr>
+    <tr><td>NDB</td><td><input type="number" step="any" id="settle_ndb" value="0" style="width:100px;"></td><td>Michelles Cut</td><td class="ro" id="settle_ndb_our">0.00</td></tr>
+    <tr style="font-weight:700;background:#f0f2ff;">
+      <td>Our Gross</td>
+      <td class="ro" id="our_gross">0.00</td>
+      <td>Split 50%</td>
+      <td class="ro" id="our_split">0.00</td>
+    </tr>
+  </tbody></table>`;
+
+  container.innerHTML = html;
+
+  // Add settlement input listeners
+  ['dan', 'fusion', 'coolock', 'ndb'].forEach(id => {
+    const el = document.getElementById(`settle_${id}`);
+    if (el) el.addEventListener('input', updateSettlement);
+  });
+}
+
+function updateCat(id, rate) {
+  const coins = parseFloat(document.getElementById(`coins_${id}`)?.value) || 0;
+  const notes = parseFloat(document.getElementById(`notes_${id}`)?.value) || 0;
+  const res = calcCategory(coins, notes, rate);
+  document.getElementById(`total_${id}`).textContent = res.total.toFixed(2);
+  document.getElementById(`mgd_${id}`).textContent = res.mgd.toFixed(2);
+  document.getElementById(`ss_${id}`).textContent = res.supplierShare.toFixed(2);
+  document.getElementById(`cl_${id}`).textContent = res.cashLeft.toFixed(2);
+  updateGrandTotals();
+}
+
+function updatePool(id, rent) {
+  const gross = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
+  const pool50 = gross * 0.5;
+  const poolTotal = gross;
+  const dansProfit = gross - rent;
+  document.getElementById(`poolTotal_${id}`).textContent = poolTotal.toFixed(2);
+  document.getElementById(`poolSS_${id}`).textContent = pool50.toFixed(2);
+  document.getElementById(`poolCL_${id}`).textContent = (gross - pool50).toFixed(2);
+  updateGrandTotals();
+}
+
+function updateGrandTotals() {
+  const locTotals = {};
+  let grandTotal = 0, grandMGD = 0, grandSS = 0, grandCL = 0, grandPool = 0;
+
+  for (const loc of config.locations) {
+    let locTotal = 0, locMGD = 0, locSS = 0, locCL = 0, locPool = 0;
+    for (const cat of loc.categories) {
+      const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
+      const total = parseFloat(document.getElementById(`total_${id}`)?.textContent) || 0;
+      const mgd = parseFloat(document.getElementById(`mgd_${id}`)?.textContent) || 0;
+      const ss = parseFloat(document.getElementById(`ss_${id}`)?.textContent) || 0;
+      const cl = parseFloat(document.getElementById(`cl_${id}`)?.textContent) || 0;
+      locTotal += total; locMGD += mgd; locSS += ss; locCL += cl;
+
+      if (cat.hasPool) {
+        const poolVal = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
+        const poolSs = parseFloat(document.getElementById(`poolSS_${id}`)?.textContent) || 0;
+        const poolCl = parseFloat(document.getElementById(`poolCL_${id}`)?.textContent) || 0;
+        locPool += poolVal;
+        locSS += poolSs;
+        locCL += poolCl;
+      }
+    }
+    const locId = loc.name.replace(/\s+/g, '_');
+    const gtT = document.getElementById(`gt_total_${locId}`);
+    const gtM = document.getElementById(`gt_mgd_${locId}`);
+    const gtS = document.getElementById(`gt_ss_${locId}`);
+    const gtC = document.getElementById(`gt_cl_${locId}`);
+    const gtP = document.getElementById(`gt_pool_${locId}`);
+    if (gtT) gtT.textContent = locTotal.toFixed(2);
+    if (gtM) gtM.textContent = locMGD.toFixed(2);
+    if (gtS) gtS.textContent = locSS.toFixed(2);
+    if (gtC) gtC.textContent = locCL.toFixed(2);
+    if (gtP) gtP.textContent = locPool.toFixed(2);
+
+    grandTotal += locTotal + locPool;
+    grandMGD += locMGD;
+    grandSS += locSS;
+    grandCL += locCL;
+    grandPool += locPool;
+  }
+
+  document.getElementById('grand_total').textContent = grandTotal.toFixed(2);
+  document.getElementById('grand_mgd').textContent = grandMGD.toFixed(2);
+  document.getElementById('grand_ss').textContent = grandSS.toFixed(2);
+  document.getElementById('grand_cl').textContent = grandCL.toFixed(2);
+  document.getElementById('grand_pool').textContent = grandPool.toFixed(2);
+
+  updateSettlement();
+}
+
+function updateSettlement() {
+  const dan = parseFloat(document.getElementById('settle_dan')?.value) || 0;
+  const fusion = parseFloat(document.getElementById('settle_fusion')?.value) || 0;
+  const coolock = parseFloat(document.getElementById('settle_coolock')?.value) || 0;
+  const ndb = parseFloat(document.getElementById('settle_ndb')?.value) || 0;
+
+  const ourDan = 0 - dan;
+  const ourFusion = 0 - fusion;
+  const ourCoolock = 0 - coolock;
+  const ourNdb = 0 - ndb;
+  const ourGross = ourDan + ourFusion + ourCoolock + ourNdb;
+  const ourSplit = ourGross / 2;
+
+  document.getElementById('settle_dan_our').textContent = ourDan.toFixed(2);
+  document.getElementById('settle_fusion_our').textContent = ourFusion.toFixed(2);
+  document.getElementById('settle_coolock_our').textContent = ourCoolock.toFixed(2);
+  document.getElementById('settle_ndb_our').textContent = ourNdb.toFixed(2);
+  document.getElementById('our_gross').textContent = ourGross.toFixed(2);
+  document.getElementById('our_split').textContent = ourSplit.toFixed(2);
+}
+
+// ===== SUBMIT =====
+function submitEntry() {
+  const date = document.getElementById('entryDate').value;
+  if (!date) { showMsg('submitMsg', 'Please select a date', 'error'); return; }
+
+  const entry = { date, timestamp: new Date().toISOString(), locations: [], settlements: {}, grandTotal: 0 };
+
+  for (const loc of config.locations) {
+    const locData = { name: loc.name, categories: [] };
+    for (const cat of loc.categories) {
+      const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
+      const coins = parseFloat(document.getElementById(`coins_${id}`)?.value) || 0;
+      const notes = parseFloat(document.getElementById(`notes_${id}`)?.value) || 0;
+      const res = calcCategory(coins, notes, cat.rate);
+      const catData = { name: cat.name, coins, notes, ...res };
+      if (cat.hasPool) {
+        catData.poolGross = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
+        catData.poolRent = cat.poolRent || 0;
+        catData.pool50 = catData.poolGross * 0.5;
+        catData.dansProfit = catData.poolGross - catData.poolRent;
+      }
+      locData.categories.push(catData);
+    }
+    entry.locations.push(locData);
+  }
+
+  entry.settlements = {
+    dan: parseFloat(document.getElementById('settle_dan')?.value) || 0,
+    fusion: parseFloat(document.getElementById('settle_fusion')?.value) || 0,
+    coolock: parseFloat(document.getElementById('settle_coolock')?.value) || 0,
+    ndb: parseFloat(document.getElementById('settle_ndb')?.value) || 0
+  };
+  entry.grandTotal = parseFloat(document.getElementById('grand_total')?.textContent) || 0;
+  entry.grandCL = parseFloat(document.getElementById('grand_cl')?.textContent) || 0;
+  entry.ourGross = parseFloat(document.getElementById('our_gross')?.textContent) || 0;
+  entry.ourSplit = parseFloat(document.getElementById('our_split')?.textContent) || 0;
+
+  const entries = getEntries();
+  // Check duplicate date
+  if (entries.some(e => e.date === date)) {
+    if (!confirm(`Entry for ${date} already exists. Overwrite?`)) return;
+    // Remove old entry for this date
+    const idx = entries.findIndex(e => e.date === date);
+    if (idx >= 0) entries.splice(idx, 1);
+  }
+
+  entries.push(entry);
+  saveEntries(entries);
+  showMsg('submitMsg', `Entry for ${date} saved!`, 'success');
+  updateHistoryCount();
+}
+
+function resetForm() {
+  renderForm();
+  document.getElementById('entryDate').value = todayStr();
+}
+
+function showMsg(id, text, type) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = `msg ${type}`;
+  setTimeout(() => el.className = 'msg', 3000);
+}
+
+// ===== HISTORY =====
+function showHistory() {
+  const entries = getEntries();
+  const container = document.getElementById('historyTable');
+  updateHistoryCount();
+
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>No submissions yet.</p></div>';
+    return;
+  }
+
+  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  let html = `<table class="tbl"><thead><tr><th>Date</th><th>Submitted</th><th>Grand Total</th><th>Cash Left</th><th>Our Gross</th><th>Actions</th></tr></thead><tbody>`;
+  for (const e of sorted) {
+    const ts = new Date(e.timestamp);
+    html += `<tr>
+      <td>${e.date}</td>
+      <td>${ts.toLocaleString()}</td>
+      <td class="ro">£${(e.grandTotal || 0).toFixed(2)}</td>
+      <td class="ro">£${(e.grandCL || 0).toFixed(2)}</td>
+      <td class="ro">£${(e.ourGross || 0).toFixed(2)}</td>
+      <td><button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteEntry('${e.date}')">Delete</button></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function updateHistoryCount() {
+  const entries = getEntries();
+  document.getElementById('historyCount').textContent = `${entries.length} entries`;
+}
+
+function deleteEntry(date) {
+  if (!confirm(`Delete entry for ${date}?`)) return;
+  let entries = getEntries();
+  entries = entries.filter(e => e.date !== date);
+  saveEntries(entries);
+  showHistory();
+  updateHistoryCount();
+}
+
+function clearHistory() {
+  if (!confirm('Delete ALL entries?')) return;
+  saveEntries([]);
+  showHistory();
+  updateHistoryCount();
+}
+
+// ===== MONTHLY SUMMARY =====
+function showMonthlySummary() {
+  const entries = getEntries();
+  const monthVal = document.getElementById('monthSelect').value;
+  if (!monthVal) { document.getElementById('monthlySummary').innerHTML = '<div class="empty-state"><p>Select a month</p></div>'; return; }
+
+  const filtered = entries.filter(e => e.date.startsWith(monthVal));
+
+  if (filtered.length === 0) {
+    document.getElementById('monthlySummary').innerHTML = '<div class="empty-state"><p>No entries for this month.</p></div>';
+    document.getElementById('monthlyChart').innerHTML = '';
+    return;
+  }
+
+  // Aggregate
+  let totalMGD = 0, totalSS = 0, totalCL = 0, totalPool = 0, totalGrand = 0, totalOurGross = 0;
+  const locTotals = {};
+
+  for (const e of filtered) {
+    totalGrand += e.grandTotal || 0;
+    totalCL += e.grandCL || 0;
+    totalOurGross += e.ourGross || 0;
+    for (const loc of e.locations || []) {
+      if (!locTotals[loc.name]) locTotals[loc.name] = { total: 0, mgd: 0, ss: 0, cl: 0, pool: 0 };
+      for (const cat of loc.categories || []) {
+        locTotals[loc.name].total += (cat.total || 0);
+        locTotals[loc.name].mgd += (cat.mgd || 0);
+        locTotals[loc.name].ss += (cat.supplierShare || 0);
+        locTotals[loc.name].cl += (cat.cashLeft || 0);
+        locTotals[loc.name].pool += (cat.poolGross || 0);
+        totalMGD += (cat.mgd || 0);
+        totalSS += (cat.supplierShare || 0);
+        totalPool += (cat.poolGross || 0);
+      }
+    }
+  }
+
+  let html = `<div class="summary-card">
+    <div class="kpi"><div class="val">${filtered.length}</div><div class="lbl">Days</div></div>
+    <div class="kpi"><div class="val">£${totalGrand.toFixed(2)}</div><div class="lbl">Grand Total</div></div>
+    <div class="kpi"><div class="val">£${totalCL.toFixed(2)}</div><div class="lbl">Cash Left</div></div>
+    <div class="kpi"><div class="val">£${totalSS.toFixed(2)}</div><div class="lbl">Supplier Share</div></div>
+    <div class="kpi"><div class="val">£${totalOurGross.toFixed(2)}</div><div class="lbl">Our Gross</div></div>
+  </div>`;
+
+  html += `<table class="tbl"><thead><tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
+  for (const [name, vals] of Object.entries(locTotals)) {
+    html += `<tr><td>${name}</td><td class="ro">£${vals.total.toFixed(2)}</td><td class="ro">£${vals.mgd.toFixed(2)}</td><td class="ro">£${vals.ss.toFixed(2)}</td><td class="ro">£${vals.cl.toFixed(2)}</td><td class="ro">£${vals.pool.toFixed(2)}</td></tr>`;
+  }
+  html += `<tr style="font-weight:700;background:#f0f2ff;">
+    <td>TOTAL</td><td class="ro">£${Object.values(locTotals).reduce((s, v) => s + v.total, 0).toFixed(2)}</td>
+    <td class="ro">£${totalMGD.toFixed(2)}</td>
+    <td class="ro">£${totalSS.toFixed(2)}</td>
+    <td class="ro">£${totalCL.toFixed(2)}</td>
+    <td class="ro">£${totalPool.toFixed(2)}</td>
+  </tr></tbody></table>`;
+
+  document.getElementById('monthlySummary').innerHTML = html;
+
+  // Daily breakdown chart
+  const dailyData = filtered.sort((a, b) => a.date.localeCompare(b.date));
+  const trace1 = { x: dailyData.map(e => e.date), y: dailyData.map(e => e.grandTotal || 0), type: 'bar', name: 'Grand Total', marker: { color: '#667eea' } };
+  const trace2 = { x: dailyData.map(e => e.date), y: dailyData.map(e => e.ourGross || 0), type: 'bar', name: 'Our Gross', marker: { color: '#48bb78' } };
+  const layout = { title: `Daily Totals - ${monthVal}`, barmode: 'group', template: 'plotly_white', hovermode: 'x' };
+  Plotly.newPlot('monthlyChart', [trace1, trace2], layout);
+}
+
+function populateMonthSelect() {
+  const entries = getEntries();
+  const months = new Set();
+  for (const e of entries) {
+    if (e.date && e.date.length >= 7) months.add(e.date.substring(0, 7));
+  }
+  const sel = document.getElementById('monthSelect');
+  sel.innerHTML = '<option value="">Select month...</option>';
+  for (const m of [...months].sort().reverse()) {
+    sel.innerHTML += `<option value="${m}">${m}</option>`;
+  }
+  if (sel.options.length > 1) sel.selectedIndex = 1;
+  showMonthlySummary();
+}
+
+// ===== SETTINGS =====
+function renderSettings() {
+  const container = document.getElementById('settingsContainer');
+  let html = '';
+  for (const loc of config.locations) {
+    html += `<div class="settings-card"><h3>${loc.name}</h3>`;
+    for (const cat of loc.categories) {
+      html += `<label>${cat.name} rate (cash left): <input type="number" step="0.01" min="0" max="1" value="${cat.rate}" onchange="updateRate('${loc.name.replace(/'/g, "\\'")}', '${cat.name.replace(/'/g, "\\'")}', this.value)"> (${((1-cat.rate)*100).toFixed(0)}% supplier)</label>`;
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function updateRate(locName, catName, val) {
+  const loc = config.locations.find(l => l.name === locName);
+  if (loc) {
+    const cat = loc.categories.find(c => c.name === catName);
+    if (cat) cat.rate = parseFloat(val) || 0.5;
+  }
+}
+
+function saveSettings() {
+  saveConfig();
+  document.getElementById('settingsMsg').textContent = 'Settings saved!';
+  document.getElementById('settingsMsg').className = 'msg success';
+  setTimeout(() => document.getElementById('settingsMsg').className = 'msg', 2000);
+  renderForm();
+}
+
+// ===== EXPORT =====
+function exportCSV() {
+  const entries = getEntries();
+  if (entries.length === 0) { alert('No entries to export.'); return; }
+
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  const rows = [['Date', 'Location', 'Category', 'Coins', 'Notes', 'Total', 'MGD', 'Supplier Share', 'Cash Left', 'Pool Gross', 'Grand Total', 'Our Gross']];
+
+  for (const e of sorted) {
+    for (const loc of e.locations || []) {
+      for (const cat of loc.categories || []) {
+        rows.push([e.date, loc.name, cat.name, cat.coins || 0, cat.notes || 0, cat.total || 0, cat.mgd || 0, cat.supplierShare || 0, cat.cashLeft || 0, cat.poolGross || 0, '', '']);
+      }
+    }
+    // Add summary row for this date
+    rows.push([e.date, 'SUMMARY', '', '', '', e.grandTotal || 0, '', '', e.grandCL || 0, '', '', e.ourGross || 0]);
+  }
+
+  const csv = rows.map(r => r.map(v => typeof v === 'string' && v.includes(',') ? `"${v}"` : v).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `the_list_export_${todayStr()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ===== PAGE NAV =====
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  document.querySelector(`.nav a[onclick*="${name}"]`)?.classList.add('active');
+
+  if (name === 'history') showHistory();
+  if (name === 'monthly') { populateMonthSelect(); }
+  if (name === 'settings') renderSettings();
+}
+
+// ===== INIT =====
+loadConfig();
+renderForm();
+updateHistoryCount();
+</script>
+</body>
+</html>
