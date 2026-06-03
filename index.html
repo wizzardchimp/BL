@@ -69,18 +69,18 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 
   /* Collapse entry table into 4-col compact grid on mobile */
   .entry-table, .entry-table tbody, .entry-table tr { display: block; }
-  .entry-table tr {
+  .entry-table tbody tr {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: 4px;
     padding: 8px;
     align-items: center;
+    border-bottom: 1px solid #e0e0e0;
   }
   /* Location header row */
   .entry-table thead { display: block; }
   .entry-table thead tr { display: block; }
   .entry-table thead tr:first-child {
-    display: block;
     padding: 10px 8px;
     background: #1a1a2e;
     color: #fff;
@@ -100,47 +100,47 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
     border: none;
   }
   .entry-table thead tr:last-child { display: none; }
-  .entry-table tbody tr { border-bottom: 1px solid #e0e0e0; }
-  .entry-table td { padding: 3px 4px; border: none; }
-  /* Row 1: Category + Coins + Notes + Total */
-  .entry-table td:nth-child(1) { grid-row: 1; grid-column: 1; font-weight: 600; font-size: 13px; display: flex; align-items: center; }
-  .entry-table td:nth-child(2) { grid-row: 1; grid-column: 2; }
-  .entry-table td:nth-child(3) { grid-row: 1; grid-column: 3; }
-  .entry-table td:nth-child(4) { grid-row: 1; grid-column: 4; }
-  /* Row 2: MGD + Split + Supplier Share + Cash Left */
-  .entry-table td:nth-child(5) { grid-row: 2; grid-column: 1; }
-  .entry-table td:nth-child(6) { grid-row: 2; grid-column: 2; }
-  .entry-table td:nth-child(7) { grid-row: 2; grid-column: 3; }
-  .entry-table td:nth-child(8) { grid-row: 2; grid-column: 4; }
 
-  .entry-table td[data-label]::before {
+  .entry-table tbody td { padding: 3px 4px; border: none; }
+  /* Single row: Category | Coins | Notes | Total */
+  .entry-table tbody td:nth-child(1) { grid-column: 1; font-weight: 600; font-size: 13px; display: flex; align-items: center; }
+  .entry-table tbody td:nth-child(2) { grid-column: 2; }
+  .entry-table tbody td:nth-child(3) { grid-column: 3; }
+  .entry-table tbody td:nth-child(4) { grid-column: 4; }
+
+  .entry-table tbody td[data-label]::before {
     content: attr(data-label);
     display: block;
-    font-size: 10px;
+    font-size: 9px;
     color: #888;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.3px;
     margin-bottom: 2px;
   }
-  /* Don't show label on category name cell */
-  .entry-table td:nth-child(1)::before { display: none; }
+  .entry-table tbody td:nth-child(1)::before { display: none; }
 
   .entry-table input[type="number"] { width: 100%; font-size: 16px; padding: 8px 4px; min-height: 38px; box-sizing: border-box; }
   .entry-table .ro { font-size: 14px; padding: 4px; text-align: center; }
 
-  /* Pool row: align Gross input left like Coins */
-  .entry-table tr.sub td:nth-child(1) { grid-column: 1; grid-row: 1; }
-  .entry-table tr.sub td:nth-child(2) { grid-column: 2; grid-row: 1; }
-  .entry-table tr.sub td:nth-child(3) { grid-column: 4; grid-row: 1; }
-  .entry-table tr.sub td:nth-child(4) { grid-column: 1; grid-row: 2; }
-  .entry-table tr.sub td:nth-child(6) { grid-column: 2; grid-row: 2; }
-  .entry-table tr.sub td:nth-child(7) { grid-column: 3; grid-row: 2; }
-  .entry-table tr.sub td:empty { display: none; }
+  /* Pool row: Gross input spans 2 cols */
+  .entry-table tbody tr.sub td:nth-child(1) { grid-column: 1; }
+  .entry-table tbody tr.sub td:nth-child(2) { grid-column: 2 / 4; }
+  .entry-table tbody tr.sub td:nth-child(3) { grid-column: 4; }
+
+  /* Location summary footer */
+  .entry-table tfoot tr { display: block; padding: 0; }
+  .entry-table tfoot td {
+    font-size: 13px !important;
+    padding: 8px 10px !important;
+    gap: 4px 12px !important;
+  }
+  .entry-table tfoot td span { white-space: nowrap; }
 }
 @media (max-width: 400px) {
   .entry-table input[type="number"] { font-size: 15px; min-height: 34px; }
-  .entry-table td { font-size: 12px; }
+  .entry-table tbody td { font-size: 12px; }
+  .entry-table tfoot td { font-size: 12px !important; gap: 3px 8px !important; }
 }
 </style>
 </head>
@@ -371,20 +371,16 @@ function renderForm() {
 
   let html = '';
   for (const loc of config.locations) {
-    html += `<div class="table-scroll"><table class="tbl entry-table"><thead><tr class="loc-header-row"><th colspan="8" class="loc-header">${loc.name}</th></tr>
-    <tr><th style="width:80px;text-align:left;">Category</th><th>Coins (£)</th><th>Notes (£)</th><th>Total</th><th>MGD (20%)</th><th style="width:60px;text-align:center;">Split</th><th>Supplier Share</th><th>Cash left</th></tr></thead><tbody>`;
+    html += `<div class="table-scroll"><table class="tbl entry-table"><thead><tr class="loc-header-row"><th colspan="4" class="loc-header">${loc.name}</th></tr>
+    <tr><th style="width:80px;text-align:left;">Category</th><th>Coins (£)</th><th>Notes (£)</th><th>Total</th></tr></thead><tbody>`;
 
     for (const cat of loc.categories) {
       const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
       html += `<tr>
-        <td><strong>${cat.name}</strong></td>
-        <td data-label="Coins"><input type="number" step="any" id="coins_${id}" oninput="updateCat('${id}', ${cat.rate})" placeholder="0"></td>
-        <td data-label="Notes"><input type="number" step="any" id="notes_${id}" oninput="updateCat('${id}', ${cat.rate})" placeholder="0"></td>
+        <td><strong>${cat.name}</strong> <span style="font-size:10px;color:#888;">(${(cat.rate * 100).toFixed(0)}/${((1 - cat.rate) * 100).toFixed(0)})</span></td>
+        <td data-label="Coins"><input type="number" step="any" id="coins_${id}" oninput="updateCat('${id}')" placeholder="0"></td>
+        <td data-label="Notes"><input type="number" step="any" id="notes_${id}" oninput="updateCat('${id}')" placeholder="0"></td>
         <td class="ro" id="total_${id}" data-label="Total">0.00</td>
-        <td class="ro" id="mgd_${id}" data-label="MGD">0.00</td>
-        <td style="font-size:12px;color:#888;" data-label="Split">${(cat.rate * 100).toFixed(0)}% / ${((1 - cat.rate) * 100).toFixed(0)}%</td>
-        <td class="ro" id="ss_${id}" data-label="Supp. Share">0.00</td>
-        <td class="ro" id="cl_${id}" data-label="Cash Left">0.00</td>
       </tr>`;
 
       if (cat.hasPool) {
@@ -392,15 +388,16 @@ function renderForm() {
           <td><strong>Pool</strong></td>
           <td data-label="Gross" colspan="2"><input type="number" step="any" id="pool_${id}" oninput="updatePool('${id}', ${cat.poolRent || 0})" placeholder="Gross" style="width:120px;"></td>
           <td class="ro" id="poolTotal_${id}" data-label="Total">0.00</td>
-          <td class="ro" id="poolMGD_${id}" data-label="MGD">-</td>
-          <td></td>
-          <td class="ro" id="poolSS_${id}" data-label="Supp. Share">0.00</td>
-          <td class="ro" id="poolCL_${id}" data-label="Cash Left">0.00</td>
         </tr>`;
       }
     }
 
-    html += '</tbody></table></div>';
+    html += `</tbody><tfoot><tr><td colspan="4" style="background:#f0f2ff;font-weight:700;font-size:12px;padding:6px 10px;display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;">
+      <span>Total: <span id="loc_total_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+      <span>MGD (20%): <span id="loc_mgd_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+      <span>Supplier Share: <span id="loc_ss_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+      <span>Cash Left: <span id="loc_cl_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+    </td></tr></tfoot></table></div>`;
   }
 
   // Grand Total section
@@ -450,30 +447,21 @@ function renderForm() {
   });
 }
 
-function updateCat(id, rate) {
+function updateCat(id) {
   const coins = parseFloat(document.getElementById(`coins_${id}`)?.value) || 0;
   const notes = parseFloat(document.getElementById(`notes_${id}`)?.value) || 0;
-  const res = calcCategory(coins, notes, rate);
-  document.getElementById(`total_${id}`).textContent = res.total.toFixed(2);
-  document.getElementById(`mgd_${id}`).textContent = res.mgd.toFixed(2);
-  document.getElementById(`ss_${id}`).textContent = res.supplierShare.toFixed(2);
-  document.getElementById(`cl_${id}`).textContent = res.cashLeft.toFixed(2);
+  const total = round(coins + notes);
+  document.getElementById(`total_${id}`).textContent = total.toFixed(2);
   updateGrandTotals();
 }
 
 function updatePool(id, rent) {
   const gross = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
-  const pool50 = gross * 0.5;
-  const poolTotal = gross;
-  const dansProfit = gross - rent;
-  document.getElementById(`poolTotal_${id}`).textContent = poolTotal.toFixed(2);
-  document.getElementById(`poolSS_${id}`).textContent = pool50.toFixed(2);
-  document.getElementById(`poolCL_${id}`).textContent = (gross - pool50).toFixed(2);
+  document.getElementById(`poolTotal_${id}`).textContent = gross.toFixed(2);
   updateGrandTotals();
 }
 
 function updateGrandTotals() {
-  const locTotals = {};
   let grandTotal = 0, grandMGD = 0, grandSS = 0, grandCL = 0, grandPool = 0;
 
   for (const loc of config.locations) {
@@ -481,31 +469,42 @@ function updateGrandTotals() {
     for (const cat of loc.categories) {
       const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
       const total = parseFloat(document.getElementById(`total_${id}`)?.textContent) || 0;
-      const mgd = parseFloat(document.getElementById(`mgd_${id}`)?.textContent) || 0;
-      const ss = parseFloat(document.getElementById(`ss_${id}`)?.textContent) || 0;
-      const cl = parseFloat(document.getElementById(`cl_${id}`)?.textContent) || 0;
-      locTotal += total; locMGD += mgd; locSS += ss; locCL += cl;
+      const mgd = total * 0.2;
+      const cashLeft = total * cat.rate;
+      const supplierShare = total - cashLeft;
+      locTotal += total; locMGD += mgd; locSS += supplierShare; locCL += cashLeft;
 
       if (cat.hasPool) {
         const poolVal = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
-        const poolSs = parseFloat(document.getElementById(`poolSS_${id}`)?.textContent) || 0;
-        const poolCl = parseFloat(document.getElementById(`poolCL_${id}`)?.textContent) || 0;
+        const pool50 = poolVal * 0.5;
         locPool += poolVal;
-        locSS += poolSs;
-        locCL += poolCl;
+        locSS += pool50;
+        locCL += pool50;
       }
     }
     const locId = loc.name.replace(/\s+/g, '_');
+
+    // Update location summary in entry table
+    const lt = document.getElementById(`loc_total_${locId}`);
+    if (lt) lt.textContent = round(locTotal + locPool).toFixed(2);
+    const lm = document.getElementById(`loc_mgd_${locId}`);
+    if (lm) lm.textContent = round(locMGD).toFixed(2);
+    const ls = document.getElementById(`loc_ss_${locId}`);
+    if (ls) ls.textContent = round(locSS).toFixed(2);
+    const lc = document.getElementById(`loc_cl_${locId}`);
+    if (lc) lc.textContent = round(locCL).toFixed(2);
+
+    // Update grand totals table
     const gtT = document.getElementById(`gt_total_${locId}`);
     const gtM = document.getElementById(`gt_mgd_${locId}`);
     const gtS = document.getElementById(`gt_ss_${locId}`);
     const gtC = document.getElementById(`gt_cl_${locId}`);
     const gtP = document.getElementById(`gt_pool_${locId}`);
-    if (gtT) gtT.textContent = locTotal.toFixed(2);
-    if (gtM) gtM.textContent = locMGD.toFixed(2);
-    if (gtS) gtS.textContent = locSS.toFixed(2);
-    if (gtC) gtC.textContent = locCL.toFixed(2);
-    if (gtP) gtP.textContent = locPool.toFixed(2);
+    if (gtT) gtT.textContent = round(locTotal + locPool).toFixed(2);
+    if (gtM) gtM.textContent = round(locMGD).toFixed(2);
+    if (gtS) gtS.textContent = round(locSS).toFixed(2);
+    if (gtC) gtC.textContent = round(locCL).toFixed(2);
+    if (gtP) gtP.textContent = round(locPool).toFixed(2);
 
     grandTotal += locTotal + locPool;
     grandMGD += locMGD;
@@ -514,11 +513,11 @@ function updateGrandTotals() {
     grandPool += locPool;
   }
 
-  document.getElementById('grand_total').textContent = grandTotal.toFixed(2);
-  document.getElementById('grand_mgd').textContent = grandMGD.toFixed(2);
-  document.getElementById('grand_ss').textContent = grandSS.toFixed(2);
-  document.getElementById('grand_cl').textContent = grandCL.toFixed(2);
-  document.getElementById('grand_pool').textContent = grandPool.toFixed(2);
+  document.getElementById('grand_total').textContent = round(grandTotal).toFixed(2);
+  document.getElementById('grand_mgd').textContent = round(grandMGD).toFixed(2);
+  document.getElementById('grand_ss').textContent = round(grandSS).toFixed(2);
+  document.getElementById('grand_cl').textContent = round(grandCL).toFixed(2);
+  document.getElementById('grand_pool').textContent = round(grandPool).toFixed(2);
 
   updateSettlement();
 }
