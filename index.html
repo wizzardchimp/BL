@@ -20,7 +20,8 @@ h2 { font-size: 16px; margin: 16px 0 8px; color: #16213e; }
 .form-header label { font-weight: 500; font-size: 14px; }
 .form-header input[type="date"] { padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-.tbl th { background: #16213e; color: white; padding: 8px 10px; text-align: left; font-weight: 500; font-size: 12px; white-space: nowrap; }
+.tbl th { background: #16213e; color: white; padding: 8px 10px; text-align: right; font-weight: 500; font-size: 12px; white-space: nowrap; }
+.tbl th.loc-header { text-align: left; }
 .tbl td { padding: 6px 10px; border-bottom: 1px solid #eee; }
 .tbl tr:hover { background: #f8f9ff; }
 .tbl .sub { background: #fafbfc; }
@@ -202,8 +203,8 @@ function renderForm() {
 
   let html = '';
   for (const loc of config.locations) {
-    html += `<table class="tbl"><thead><tr><th colspan="6" style="background:#1a1a2e;">${loc.name}</th></tr>`;
-    html += `<tr><th style="width:100px;">Category</th><th>Coins (£)</th><th>Notes (£)</th><th>Total</th><th>MGD (20%)</th><th style="width:80px;">Rate</th><th>Supplier Share</th><th>Cash left</th></tr></thead><tbody>`;
+    html += `<table class="tbl"><thead><tr><th colspan="8" class="loc-header" style="background:#1a1a2e;">${loc.name}</th></tr>`;
+    html += `<tr><th style="width:100px;text-align:left;">Category</th><th>Coins (£)</th><th>Notes (£)</th><th>Total</th><th>MGD (20%)</th><th style="width:80px;text-align:center;">Rate</th><th>Supplier Share</th><th>Cash left</th></tr></thead><tbody>`;
 
     for (const cat of loc.categories) {
       const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
