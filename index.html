@@ -88,9 +88,15 @@ h2 { font-size: 16px; margin: 16px 0 8px; color: #16213e; }
 </div>
 
 <div id="page-monthly" class="page">
-  <h1>Monthly Summary</h1>
-  <div class="toolbar">
-    <select id="monthSelect" class="month-select" onchange="showMonthlySummary()"></select>
+  <h1>Summary</h1>
+  <div class="toolbar" style="flex-wrap:wrap;">
+    <label style="font-size:13px;">From: <input type="date" id="filterFrom" onchange="clearRangeRadios();showMonthlySummary()"></label>
+    <label style="font-size:13px;">To: <input type="date" id="filterTo" onchange="clearRangeRadios();showMonthlySummary()"></label>
+    <span style="color:#ccc;margin:0 4px;">|</span>
+    <label style="font-size:13px;"><input type="radio" name="range" value="3" onchange="applyRangeFilter()"> 3m</label>
+    <label style="font-size:13px;"><input type="radio" name="range" value="6" onchange="applyRangeFilter()"> 6m</label>
+    <label style="font-size:13px;"><input type="radio" name="range" value="12" onchange="applyRangeFilter()"> 12m</label>
+    <label style="font-size:13px;"><input type="radio" name="range" value="all" checked onchange="applyRangeFilter()"> All</label>
   </div>
   <div id="monthlySummary"></div>
   <div id="monthlyChart" style="height:400px;"></div>
@@ -483,15 +489,39 @@ function clearHistory() {
 }
 
 // ===== MONTHLY SUMMARY =====
+function applyRangeFilter() {
+  const val = document.querySelector('input[name="range"]:checked')?.value;
+  if (!val || val === 'all') {
+    document.getElementById('filterFrom').value = '';
+    document.getElementById('filterTo').value = '';
+  } else {
+    const months = parseInt(val);
+    const d = new Date();
+    document.getElementById('filterTo').value = todayStr();
+    d.setMonth(d.getMonth() - months);
+    document.getElementById('filterFrom').value = getDateStr(d);
+  }
+  showMonthlySummary();
+}
+
+function clearRangeRadios() {
+  document.querySelectorAll('input[name="range"]').forEach(r => r.checked = false);
+}
+
 function showMonthlySummary() {
   const entries = getEntries();
-  const monthVal = document.getElementById('monthSelect').value;
-  if (!monthVal) { document.getElementById('monthlySummary').innerHTML = '<div class="empty-state"><p>Select a month</p></div>'; return; }
+  const fromVal = document.getElementById('filterFrom').value;
+  const toVal = document.getElementById('filterTo').value;
 
-  const filtered = entries.filter(e => e.date.startsWith(monthVal));
+  let filtered = entries;
+  if (fromVal) filtered = filtered.filter(e => e.date >= fromVal);
+  if (toVal) filtered = filtered.filter(e => e.date <= toVal);
+  filtered.sort((a, b) => a.date.localeCompare(b.date));
+
+  const label = fromVal || toVal ? `${fromVal || '…'} to ${toVal || '…'}` : 'All time';
 
   if (filtered.length === 0) {
-    document.getElementById('monthlySummary').innerHTML = '<div class="empty-state"><p>No entries for this month.</p></div>';
+    document.getElementById('monthlySummary').innerHTML = '<div class="empty-state"><p>No entries for this period.</p></div>';
     document.getElementById('monthlyChart').innerHTML = '';
     return;
   }
@@ -520,7 +550,7 @@ function showMonthlySummary() {
   }
 
   let html = `<div class="summary-card">
-    <div class="kpi"><div class="val">${filtered.length}</div><div class="lbl">Days</div></div>
+    <div class="kpi"><div class="val">${filtered.length}</div><div class="lbl">Days (${label})</div></div>
     <div class="kpi"><div class="val">£${totalGrand.toFixed(2)}</div><div class="lbl">Grand Total</div></div>
     <div class="kpi"><div class="val">£${totalCL.toFixed(2)}</div><div class="lbl">Cash Left</div></div>
     <div class="kpi"><div class="val">£${totalSS.toFixed(2)}</div><div class="lbl">Supplier Share</div></div>
@@ -539,29 +569,29 @@ function showMonthlySummary() {
     <td class="ro">£${totalPool.toFixed(2)}</td>
   </tr></tbody></table>`;
 
+  // Monthly breakdown
+  const monthlyMap = {};
+  for (const e of filtered) {
+    const m = e.date.substring(0, 7);
+    if (!monthlyMap[m]) monthlyMap[m] = { grand: 0, cl: 0, ourGross: 0, count: 0 };
+    monthlyMap[m].grand += e.grandTotal || 0;
+    monthlyMap[m].cl += e.grandCL || 0;
+    monthlyMap[m].ourGross += e.ourGross || 0;
+    monthlyMap[m].count++;
+  }
+  html += `<div style="margin-top:16px;"><h2>Monthly Breakdown</h2><table class="tbl"><thead><tr><th>Month</th><th>Days</th><th>Grand Total</th><th>Cash Left</th><th>Our Gross</th></tr></thead><tbody>`;
+  for (const [m, v] of Object.entries(monthlyMap).sort()) {
+    html += `<tr><td>${m}</td><td>${v.count}</td><td class="ro">£${v.grand.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td><td class="ro">£${v.ourGross.toFixed(2)}</td></tr>`;
+  }
+  html += '</tbody></table></div>';
+
   document.getElementById('monthlySummary').innerHTML = html;
 
   // Daily breakdown chart
-  const dailyData = filtered.sort((a, b) => a.date.localeCompare(b.date));
-  const trace1 = { x: dailyData.map(e => e.date), y: dailyData.map(e => e.grandTotal || 0), type: 'bar', name: 'Grand Total', marker: { color: '#667eea' } };
-  const trace2 = { x: dailyData.map(e => e.date), y: dailyData.map(e => e.ourGross || 0), type: 'bar', name: 'Our Gross', marker: { color: '#48bb78' } };
-  const layout = { title: `Daily Totals - ${monthVal}`, barmode: 'group', template: 'plotly_white', hovermode: 'x' };
+  const trace1 = { x: filtered.map(e => e.date), y: filtered.map(e => e.grandTotal || 0), type: 'bar', name: 'Grand Total', marker: { color: '#667eea' } };
+  const trace2 = { x: filtered.map(e => e.date), y: filtered.map(e => e.ourGross || 0), type: 'bar', name: 'Our Gross', marker: { color: '#48bb78' } };
+  const layout = { title: `Daily Totals (${label})`, barmode: 'group', template: 'plotly_white', hovermode: 'x' };
   Plotly.newPlot('monthlyChart', [trace1, trace2], layout);
-}
-
-function populateMonthSelect() {
-  const entries = getEntries();
-  const months = new Set();
-  for (const e of entries) {
-    if (e.date && e.date.length >= 7) months.add(e.date.substring(0, 7));
-  }
-  const sel = document.getElementById('monthSelect');
-  sel.innerHTML = '<option value="">Select month...</option>';
-  for (const m of [...months].sort().reverse()) {
-    sel.innerHTML += `<option value="${m}">${m}</option>`;
-  }
-  if (sel.options.length > 1) sel.selectedIndex = 1;
-  showMonthlySummary();
 }
 
 // ===== SETTINGS =====
@@ -630,7 +660,7 @@ function showPage(name) {
   document.querySelector(`.nav a[onclick*="${name}"]`)?.classList.add('active');
 
   if (name === 'history') showHistory();
-  if (name === 'monthly') { populateMonthSelect(); }
+  if (name === 'monthly') { showMonthlySummary(); }
   if (name === 'settings') renderSettings();
 }
 
