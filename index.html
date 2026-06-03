@@ -105,10 +105,20 @@ h2 { font-size: 16px; margin: 16px 0 8px; color: #16213e; }
 
 <div id="page-settings" class="page">
   <h1>Settings</h1>
-  <p style="font-size:13px;color:#888;margin-bottom:12px;">Configure revenue split rates per location and category.</p>
+
+  <div class="summary-card" style="margin-bottom:16px;">
+    <h2>Google Sheet API URL</h2>
+    <p style="font-size:13px;color:#888;margin:4px 0 8px;">Paste the web app URL from Extensions → Apps Script → Deploy → New deployment</p>
+    <input type="url" id="apiUrlInput" style="width:100%;max-width:600px;padding:8px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px;" placeholder="https://script.google.com/macros/s/.../exec">
+    <button class="btn btn-primary" style="margin-top:8px;" onclick="saveApiUrl()">Save API URL</button>
+    <span id="apiUrlMsg" class="msg"></span>
+  </div>
+
+  <h2>Revenue Split Rates</h2>
+  <p style="font-size:13px;color:#888;margin-bottom:12px;">Configure per location and category.</p>
   <div id="settingsContainer" class="settings-grid"></div>
   <div style="margin-top:16px;">
-    <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+    <button class="btn btn-primary" onclick="saveSettings()">Save Rates</button>
     <span id="settingsMsg" class="msg"></span>
   </div>
 </div>
@@ -172,15 +182,85 @@ function todayStr() {
   return getDateStr(new Date());
 }
 
-// ===== ENTRIES =====
-function getEntries() {
-  try { return JSON.parse(localStorage.getItem('list_entries') || '[]'); }
-  catch(e) { return []; }
+// ===== ENTRIES (Google Sheet backend) =====
+let cachedEntries = [];
+let entriesLoaded = false;
+
+function getApiUrl() {
+  return localStorage.getItem('list_api_url') || '';
 }
 
-function saveEntries(entries) {
-  localStorage.setItem('list_entries', JSON.stringify(entries));
+function setApiUrl(url) {
+  localStorage.setItem('list_api_url', url);
 }
+
+async function loadEntries() {
+  const url = getApiUrl();
+  if (!url) { cachedEntries = []; entriesLoaded = true; return []; }
+  try {
+    const r = await fetch(url);
+    cachedEntries = await r.json();
+    entriesLoaded = true;
+    return cachedEntries;
+  } catch(e) {
+    console.error('Failed to load entries:', e);
+    cachedEntries = [];
+    entriesLoaded = true;
+    return [];
+  }
+}
+
+function getEntries() {
+  return cachedEntries;
+}
+
+async function saveEntry(entry) {
+  const url = getApiUrl();
+  if (!url) { showMsg('submitMsg', 'No API URL set — go to Settings', 'error'); return false; }
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(entry)
+    });
+    const result = await r.json();
+    if (result.success) {
+      // Update cache: remove existing entry for this date, add new one
+      cachedEntries = cachedEntries.filter(e => e.date !== entry.date);
+      cachedEntries.push(entry);
+      return true;
+    }
+    return false;
+  } catch(e) {
+    console.error('Failed to save entry:', e);
+    return false;
+  }
+}
+
+async function deleteEntryFromSheet(date) {
+  // For delete, we POST with a special action
+  const url = getApiUrl();
+  if (!url) return false;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'delete', date })
+    });
+    const result = await r.json();
+    if (result.success) {
+      cachedEntries = cachedEntries.filter(e => e.date !== date);
+      return true;
+    }
+    return false;
+  } catch(e) {
+    console.error('Failed to delete entry:', e);
+    return false;
+  }
+}
+
+// Override the Apps Script to support delete
+// (Will update Code.gs after)
 
 // ===== CALCULATIONS =====
 function calcCategory(coins, notes, rate) {
@@ -377,7 +457,7 @@ function updateSettlement() {
 }
 
 // ===== SUBMIT =====
-function submitEntry() {
+async function submitEntry() {
   const date = document.getElementById('entryDate').value;
   if (!date) { showMsg('submitMsg', 'Please select a date', 'error'); return; }
 
@@ -413,19 +493,19 @@ function submitEntry() {
   entry.ourGross = parseFloat(document.getElementById('our_gross')?.textContent) || 0;
   entry.ourSplit = parseFloat(document.getElementById('our_split')?.textContent) || 0;
 
-  const entries = getEntries();
-  // Check duplicate date
-  if (entries.some(e => e.date === date)) {
-    if (!confirm(`Entry for ${date} already exists. Overwrite?`)) return;
-    // Remove old entry for this date
-    const idx = entries.findIndex(e => e.date === date);
-    if (idx >= 0) entries.splice(idx, 1);
-  }
+  // Check duplicate
+  const dup = getEntries().find(e => e.date === date);
+  if (dup && !confirm(`Entry for ${date} already exists. Overwrite?`)) return;
 
-  entries.push(entry);
-  saveEntries(entries);
-  showMsg('submitMsg', `Entry for ${date} saved!`, 'success');
+  showMsg('submitMsg', 'Saving...', 'success');
+  const ok = await saveEntry(entry);
+  if (ok) {
+    showMsg('submitMsg', `Entry for ${date} saved!`, 'success');
+  } else {
+    showMsg('submitMsg', `Save failed. Check Settings → API URL`, 'error');
+  }
   updateHistoryCount();
+  showHistory();
 }
 
 function resetForm() {
@@ -473,18 +553,30 @@ function updateHistoryCount() {
   document.getElementById('historyCount').textContent = `${entries.length} entries`;
 }
 
-function deleteEntry(date) {
+async function deleteEntry(date) {
   if (!confirm(`Delete entry for ${date}?`)) return;
-  let entries = getEntries();
-  entries = entries.filter(e => e.date !== date);
-  saveEntries(entries);
+  const ok = await deleteEntryFromSheet(date);
+  if (!ok) {
+    // Fallback: remove from local cache only
+    cachedEntries = cachedEntries.filter(e => e.date !== date);
+  }
   showHistory();
   updateHistoryCount();
 }
 
-function clearHistory() {
+async function clearHistory() {
   if (!confirm('Delete ALL entries?')) return;
-  saveEntries([]);
+  const url = getApiUrl();
+  if (url) {
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'clear' })
+      });
+    } catch(e) {}
+  }
+  cachedEntries = [];
   showHistory();
   updateHistoryCount();
 }
@@ -597,6 +689,7 @@ function showMonthlySummary() {
 
 // ===== SETTINGS =====
 function renderSettings() {
+  document.getElementById('apiUrlInput').value = getApiUrl();
   const container = document.getElementById('settingsContainer');
   let html = '';
   for (const loc of config.locations) {
@@ -607,6 +700,19 @@ function renderSettings() {
     html += '</div>';
   }
   container.innerHTML = html;
+}
+
+function saveApiUrl() {
+  const url = document.getElementById('apiUrlInput').value.trim();
+  setApiUrl(url);
+  document.getElementById('apiUrlMsg').textContent = 'API URL saved!';
+  document.getElementById('apiUrlMsg').className = 'msg success';
+  setTimeout(() => document.getElementById('apiUrlMsg').className = 'msg', 2000);
+  // Reload entries from new URL
+  loadEntries().then(() => {
+    updateHistoryCount();
+    showHistory();
+  });
 }
 
 function updateRate(locName, catName, val) {
@@ -668,7 +774,9 @@ function showPage(name) {
 // ===== INIT =====
 loadConfig();
 renderForm();
-updateHistoryCount();
+loadEntries().then(() => {
+  updateHistoryCount();
+});
 </script>
 </body>
 </html>
