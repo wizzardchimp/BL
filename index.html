@@ -227,6 +227,13 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
     <span id="apiUrlMsg" class="msg"></span>
   </div>
 
+  <div class="summary-card" style="margin-bottom:16px;">
+    <h2>Delete Last Submission</h2>
+    <p style="font-size:13px;color:#888;margin:4px 0 8px;">Remove the most recent entry from the sheet and local cache.</p>
+    <button class="btn btn-danger" onclick="deleteLastSubmission()">Delete Last</button>
+    <span id="deleteLastMsg" class="msg"></span>
+  </div>
+
   <h2>Revenue Split Rates</h2>
   <p style="font-size:13px;color:#888;margin-bottom:12px;">Configure per location and category.</p>
   <div id="settingsContainer" class="settings-grid"></div>
@@ -631,9 +638,30 @@ async function deleteEntry(date) {
   if (!confirm(`Delete entry for ${date}?`)) return;
   const ok = await deleteEntryFromSheet(date);
   if (!ok) {
-    // Fallback: remove from local cache only
     cachedEntries = cachedEntries.filter(e => e.date !== date);
   }
+  showHistory();
+  updateHistoryCount();
+}
+
+function deleteLastSubmission() {
+  const entries = getEntries();
+  if (!entries.length) {
+    document.getElementById('deleteLastMsg').textContent = 'No entries to delete.';
+    document.getElementById('deleteLastMsg').className = 'msg error';
+    return;
+  }
+  const last = entries.sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (!confirm(`Delete the most recent entry (${last.date})?`)) return;
+  deleteEntryFromSheet(last.date).then(ok => {
+    if (!ok) cachedEntries = cachedEntries.filter(e => e.date !== last.date);
+    const el = document.getElementById('deleteLastMsg');
+    el.textContent = `Deleted entry for ${last.date}`;
+    el.className = 'msg success';
+    setTimeout(() => el.className = 'msg', 3000);
+    updateHistoryCount();
+  });
+}
   showHistory();
   updateHistoryCount();
 }
