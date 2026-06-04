@@ -30,6 +30,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 .tbl input[type="number"]:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 2px rgba(102,126,234,.2); }
 .tbl .ro { color: #666; text-align: right; padding-right: 8px; font-variant-numeric: tabular-nums; font-size: 12px; }
 .tbl .loc-name { font-weight: 600; color: #16213e; }
+.entry-table tfoot tr.loc-summary td { background: #f0f2ff; font-weight: 700; font-size: 12px; padding: 6px 8px; }
 .btn { padding: 10px 18px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500; min-height: 40px; -webkit-tap-highlight-color: transparent; }
 .btn-primary { background: #667eea; color: white; }
 .btn-primary:active { background: #5a6fd6; }
@@ -117,6 +118,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
     text-transform: uppercase;
     letter-spacing: 0.3px;
     margin-bottom: 2px;
+    text-align: left;
   }
   .entry-table tbody td:nth-child(1)::before { display: none; }
 
@@ -128,14 +130,32 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .entry-table tbody tr.sub td:nth-child(2) { grid-column: 2 / 4; }
   .entry-table tbody tr.sub td:nth-child(3) { grid-column: 4; }
 
-  /* Location summary footer */
-  .entry-table tfoot tr { display: block; padding: 0; }
-  .entry-table tfoot td {
-    font-size: 13px !important;
-    padding: 8px 10px !important;
-    gap: 4px 12px !important;
+  /* Location summary footer as 4-col row */
+  .entry-table tfoot tr.loc-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 4px;
+    padding: 8px;
+    background: #f0f2ff;
+    font-weight: 700;
+    font-size: 12px;
   }
-  .entry-table tfoot td span { white-space: nowrap; }
+  .entry-table tfoot td {
+    padding: 3px 4px;
+    border: none;
+    text-align: center;
+  }
+  .entry-table tfoot td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 9px;
+    color: #888;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 2px;
+    text-align: center;
+  }
 }
 @media (max-width: 400px) {
   .entry-table input[type="number"] { font-size: 15px; min-height: 34px; }
@@ -392,12 +412,12 @@ function renderForm() {
       }
     }
 
-    html += `</tbody><tfoot><tr><td colspan="4" style="background:#f0f2ff;font-weight:700;font-size:12px;padding:6px 10px;display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;">
-      <span>Total: <span id="loc_total_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
-      <span>MGD (20%): <span id="loc_mgd_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
-      <span>Supplier Share: <span id="loc_ss_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
-      <span>Cash Left: <span id="loc_cl_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
-    </td></tr></tfoot></table></div>`;
+    html += `</tbody><tfoot><tr class="loc-summary">
+      <td data-label="Total"><span id="loc_total_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
+      <td data-label="MGD (20%)"><span id="loc_mgd_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
+      <td data-label="Supp. Share"><span id="loc_ss_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
+      <td data-label="Cash Left"><span id="loc_cl_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
+    </tr></tfoot></table></div>`;
   }
 
   // Grand Total section
@@ -476,10 +496,18 @@ function updateGrandTotals() {
 
       if (cat.hasPool) {
         const poolVal = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
-        const pool50 = poolVal * 0.5;
+        const rent = cat.poolRent || 0;
+        let poolSS, poolCL;
+        if (rent > 0) {
+          poolSS = Math.min(rent, poolVal);
+          poolCL = poolVal - poolSS;
+        } else {
+          poolSS = poolVal * 0.5;
+          poolCL = poolVal * 0.5;
+        }
         locPool += poolVal;
-        locSS += pool50;
-        locCL += pool50;
+        locSS += poolSS;
+        locCL += poolCL;
       }
     }
     const locId = loc.name.replace(/\s+/g, '_');
