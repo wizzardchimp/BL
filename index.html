@@ -21,7 +21,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 .form-header input[type="date"] { padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 .tbl { width: 100%; border-collapse: collapse; font-size: 12px; background: white; }
-.tbl th { background: #16213e; color: white; padding: 8px 8px; text-align: right; font-weight: 500; font-size: 11px; white-space: nowrap; }
+.tbl th { background: #16213e; color: white; padding: 8px 8px; text-align: left; font-weight: 500; font-size: 11px; white-space: nowrap; }
 .tbl th.loc-header { text-align: left; }
 .tbl td { padding: 6px 8px; border-bottom: 1px solid #eee; }
 .tbl tr:hover { background: #f8f9ff; }
@@ -30,7 +30,9 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 .tbl input[type="number"]:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 2px rgba(102,126,234,.2); }
 .tbl .ro { color: #666; text-align: right; padding-right: 8px; font-variant-numeric: tabular-nums; font-size: 12px; }
 .tbl .loc-name { font-weight: 600; color: #16213e; }
-.entry-table tfoot tr.loc-summary td { background: #f0f2ff; font-weight: 700; font-size: 12px; padding: 6px 8px; }
+.entry-table tfoot td.loc-summary { background: #f0f2ff; font-weight: 700; font-size: 12px; padding: 6px 10px; white-space: nowrap; }
+.entry-table tfoot td.loc-summary > span { margin-right: 20px; }
+.entry-table tfoot td.loc-summary .ls-lbl { font-weight: 700; color: #333; }
 .btn { padding: 10px 18px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500; min-height: 40px; -webkit-tap-highlight-color: transparent; }
 .btn-primary { background: #667eea; color: white; }
 .btn-primary:active { background: #5a6fd6; }
@@ -130,31 +132,25 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .entry-table tbody tr.sub td:nth-child(2) { grid-column: 2 / 4; }
   .entry-table tbody tr.sub td:nth-child(3) { grid-column: 4; }
 
-  /* Location summary footer as 4-col row */
-  .entry-table tfoot tr.loc-summary {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-    gap: 4px;
-    padding: 8px;
-    background: #f0f2ff;
-    font-weight: 700;
-    font-size: 12px;
+  /* Location summary footer: equal-spread flex row */
+  .entry-table tfoot td.loc-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 8px 10px;
   }
-  .entry-table tfoot td {
-    padding: 3px 4px;
-    border: none;
-    text-align: center;
-  }
-  .entry-table tfoot td[data-label]::before {
-    content: attr(data-label);
+  .entry-table tfoot td.loc-summary > span { margin-right: 0; }
+  .entry-table tfoot td.loc-summary .ls-lbl {
     display: block;
     font-size: 9px;
     color: #888;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    margin-bottom: 2px;
     text-align: center;
+    margin-bottom: 1px;
   }
 }
 @media (max-width: 400px) {
@@ -412,12 +408,12 @@ function renderForm() {
       }
     }
 
-    html += `</tbody><tfoot><tr class="loc-summary">
-      <td data-label="Total"><span id="loc_total_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
-      <td data-label="MGD (20%)"><span id="loc_mgd_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
-      <td data-label="Supp. Share"><span id="loc_ss_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
-      <td data-label="Cash Left"><span id="loc_cl_${loc.name.replace(/\s+/g, '_')}">0.00</span></td>
-    </tr></tfoot></table></div>`;
+    html += `</tbody><tfoot><tr><td colspan="4" class="loc-summary">
+      <span><span class="ls-lbl">Total:</span> <span id="loc_total_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+      <span><span class="ls-lbl">MGD (20%):</span> <span id="loc_mgd_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+      <span><span class="ls-lbl">Supp. Share:</span> <span id="loc_ss_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+      <span><span class="ls-lbl">Cash Left:</span> <span id="loc_cl_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
+    </td></tr></tfoot></table></div>`;
   }
 
   // Grand Total section
