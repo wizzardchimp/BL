@@ -78,7 +78,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .entry-table, .entry-table tbody, .entry-table tr { display: block; }
   .entry-table tbody tr {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 4px;
     padding: 8px;
     align-items: center;
@@ -109,7 +109,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .entry-table thead tr:last-child { display: none; }
 
   .entry-table tbody td { padding: 3px 4px; border: none; }
-  /* Single row: Category | Coins | Notes | Total */
+  /* Single row: Category | Cash | Total */
   .entry-table tbody td:nth-child(1) { grid-column: 1; font-weight: 600; font-size: 13px; }
   .entry-table tbody td:nth-child(2) { grid-column: 2; }
   .entry-table tbody td:nth-child(3) { grid-column: 3; }
@@ -131,10 +131,10 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .entry-table input[type="number"] { width: 100%; font-size: 16px; padding: 8px 4px; min-height: 38px; box-sizing: border-box; }
   .entry-table .ro { font-size: 14px; padding: 4px; text-align: center; }
 
-  /* Pool row: Gross input spans 2 cols */
+  /* Pool row: Gross input in cash column */
   .entry-table tbody tr.sub td:nth-child(1) { grid-column: 1; }
-  .entry-table tbody tr.sub td:nth-child(2) { grid-column: 2 / 4; }
-  .entry-table tbody tr.sub td:nth-child(3) { grid-column: 4; }
+  .entry-table tbody tr.sub td:nth-child(2) { grid-column: 2; }
+  .entry-table tbody tr.sub td:nth-child(3) { grid-column: 3; }
 
   /* Location summary footer: equal-spread flex row */
   .entry-table tfoot td.loc-summary { padding: 0; }
@@ -383,10 +383,8 @@ async function deleteEntryFromSheet(date) {
 // (Will update Code.gs after)
 
 // ===== CALCULATIONS =====
-function calcCategory(coins, notes, rate) {
-  const c = parseFloat(coins) || 0;
-  const n = parseFloat(notes) || 0;
-  const total = c + n;
+function calcCategory(cash, rate) {
+  const total = parseFloat(cash) || 0;
   const mgd = total * 0.2;
   const cashLeft = total * rate;
   const supplierShare = total - cashLeft;
@@ -403,28 +401,27 @@ function renderForm() {
 
   let html = '';
   for (const loc of config.locations) {
-    html += `<div class="table-scroll"><table class="tbl entry-table"><thead><tr class="loc-header-row"><th colspan="4" class="loc-header">${loc.name}</th></tr>
-    <tr><th style="width:80px;text-align:left;">Category</th><th>Coins (£)</th><th>Notes (£)</th><th>Total</th></tr></thead><tbody>`;
+    html += `<div class="table-scroll"><table class="tbl entry-table"><thead><tr class="loc-header-row"><th colspan="3" class="loc-header">${loc.name}</th></tr>
+    <tr><th style="width:80px;text-align:left;">Category</th><th>Cash (£)</th><th>Total</th></tr></thead><tbody>`;
 
     for (const cat of loc.categories) {
       const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
       html += `<tr>
         <td><strong>${cat.name}</strong><br><span style="font-size:10px;color:#888;">(${(cat.rate * 100).toFixed(0)}/${((1 - cat.rate) * 100).toFixed(0)})</span></td>
-        <td data-label="Coins"><input type="number" step="any" id="coins_${id}" oninput="updateCat('${id}')" placeholder="0"></td>
-        <td data-label="Notes"><input type="number" step="any" id="notes_${id}" oninput="updateCat('${id}')" placeholder="0"></td>
+        <td data-label="Cash"><input type="number" step="any" id="cash_${id}" oninput="updateCat('${id}')" placeholder="0" style="width:100%;max-width:130px;"></td>
         <td class="ro" id="total_${id}" data-label="Total">0.00</td>
       </tr>`;
 
       if (cat.hasPool) {
         html += `<tr class="sub">
           <td><strong>Pool</strong></td>
-          <td data-label="Gross" colspan="2"><input type="number" step="any" id="pool_${id}" oninput="updatePool('${id}', ${cat.poolRent || 0})" placeholder="Gross" style="width:120px;"></td>
+          <td data-label="Gross"><input type="number" step="any" id="pool_${id}" oninput="updatePool('${id}', ${cat.poolRent || 0})" placeholder="Gross" style="width:100%;max-width:130px;"></td>
           <td class="ro" id="poolTotal_${id}" data-label="Total">0.00</td>
         </tr>`;
       }
     }
 
-    html += `</tbody><tfoot><tr><td colspan="4" class="loc-summary"><div class="loc-summary-inner">
+    html += `</tbody><tfoot><tr><td colspan="3" class="loc-summary"><div class="loc-summary-inner">
       <span><span class="ls-lbl">Total:</span> <span id="loc_total_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
       <span><span class="ls-lbl">MGD (20%):</span> <span id="loc_mgd_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
       <span><span class="ls-lbl">Supp. Share:</span> <span id="loc_ss_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
@@ -459,10 +456,8 @@ function renderForm() {
 }
 
 function updateCat(id) {
-  const coins = parseFloat(document.getElementById(`coins_${id}`)?.value) || 0;
-  const notes = parseFloat(document.getElementById(`notes_${id}`)?.value) || 0;
-  const total = round(coins + notes);
-  document.getElementById(`total_${id}`).textContent = total.toFixed(2);
+  const cash = parseFloat(document.getElementById(`cash_${id}`)?.value) || 0;
+  document.getElementById(`total_${id}`).textContent = round(cash).toFixed(2);
   updateGrandTotals();
 }
 
@@ -550,10 +545,9 @@ async function submitEntry() {
     const locData = { name: loc.name, categories: [] };
     for (const cat of loc.categories) {
       const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
-      const coins = parseFloat(document.getElementById(`coins_${id}`)?.value) || 0;
-      const notes = parseFloat(document.getElementById(`notes_${id}`)?.value) || 0;
-      const res = calcCategory(coins, notes, cat.rate);
-      const catData = { name: cat.name, coins, notes, ...res };
+      const cash = parseFloat(document.getElementById(`cash_${id}`)?.value) || 0;
+      const res = calcCategory(cash, cat.rate);
+      const catData = { name: cat.name, cash, ...res };
       if (cat.hasPool) {
         catData.poolGross = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
         catData.poolRent = cat.poolRent || 0;
@@ -840,12 +834,13 @@ function exportCSV() {
   if (entries.length === 0) { alert('No entries to export.'); return; }
 
   const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-  const rows = [['Date', 'Location', 'Category', 'Coins', 'Notes', 'Total', 'MGD', 'Supplier Share', 'Cash Left', 'Pool Gross', 'Grand Total']];
+  const rows = [['Date', 'Location', 'Category', 'Cash', 'Total', 'MGD', 'Supplier Share', 'Cash Left', 'Pool Gross', 'Grand Total']];
 
   for (const e of sorted) {
     for (const loc of e.locations || []) {
       for (const cat of loc.categories || []) {
-        rows.push([e.date, loc.name, cat.name, cat.coins || 0, cat.notes || 0, cat.total || 0, cat.mgd || 0, cat.supplierShare || 0, cat.cashLeft || 0, cat.poolGross || 0, '']);
+        const cash = cat.cash ?? ((cat.coins || 0) + (cat.notes || 0));
+        rows.push([e.date, loc.name, cat.name, cash, cat.total || 0, cat.mgd || 0, cat.supplierShare || 0, cat.cashLeft || 0, cat.poolGross || 0, '']);
       }
     }
     // Add summary row for this date
