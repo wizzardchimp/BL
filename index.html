@@ -25,7 +25,6 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 .tbl th.loc-header { text-align: left; }
 .tbl td { padding: 6px 8px; border-bottom: 1px solid #eee; }
 .tbl tr:hover { background: #f8f9ff; }
-.tbl .sub { background: #fafbfc; }
 .tbl input[type="number"] { width: 70px; padding: 6px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; text-align: right; min-height: 32px; }
 .tbl input[type="number"]:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 2px rgba(102,126,234,.2); }
 .tbl .ro { color: #666; text-align: right; padding-right: 8px; font-variant-numeric: tabular-nums; font-size: 12px; }
@@ -130,11 +129,6 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 
   .entry-table input[type="number"] { width: 100%; font-size: 16px; padding: 8px 4px; min-height: 38px; box-sizing: border-box; }
   .entry-table .ro { font-size: 14px; padding: 4px; text-align: center; }
-
-  /* Pool row: Gross input in cash column */
-  .entry-table tbody tr.sub td:nth-child(1) { grid-column: 1; }
-  .entry-table tbody tr.sub td:nth-child(2) { grid-column: 2; }
-  .entry-table tbody tr.sub td:nth-child(3) { grid-column: 3; }
 
   /* Location summary footer: equal-spread flex row */
   .entry-table tfoot td.loc-summary { padding: 0; }
@@ -248,32 +242,32 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 const DEFAULT_CONFIG = {
   locations: [
     {
-      name: 'Albert Telford', categories: [
-        { name: 'Reels', rate: 0.6, hasPool: true, poolRent: 100 },
-        { name: 'Digital', rate: 0.5, hasPool: false }
+      name: 'Albert Telford', hasPool: true, poolRent: 100, categories: [
+        { name: 'Reels', rate: 0.6 },
+        { name: 'Digital', rate: 0.5 }
       ]
     },
     {
       name: 'Albert Shrew', categories: [
-        { name: 'Reels', rate: 0.6, hasPool: false },
-        { name: 'Digital', rate: 0.5, hasPool: false }
+        { name: 'Reels', rate: 0.6 },
+        { name: 'Digital', rate: 0.5 }
       ]
     },
     {
-      name: 'Fusion', categories: [
-        { name: 'Reel', rate: 0.5, hasPool: true, poolRent: 0 },
-        { name: 'Digital', rate: 0.5, hasPool: false }
+      name: 'Fusion', hasPool: true, poolRent: 0, categories: [
+        { name: 'Reel', rate: 0.5 },
+        { name: 'Digital', rate: 0.5 }
       ]
     },
     {
       name: 'Coolock', categories: [
-        { name: 'Reels', rate: 0.6, hasPool: false },
-        { name: 'Digital', rate: 0.5, hasPool: false }
+        { name: 'Reels', rate: 0.6 },
+        { name: 'Digital', rate: 0.5 }
       ]
     },
     {
       name: 'Next Door Bar', categories: [
-        { name: 'Reels', rate: 0.5, hasPool: false }
+        { name: 'Reels', rate: 0.5 }
       ]
     }
   ]
@@ -285,6 +279,18 @@ function loadConfig() {
   const saved = localStorage.getItem('list_config');
   if (saved) {
     config = JSON.parse(saved);
+    // Migrate old configs: move hasPool/poolRent from category to location
+    for (const loc of config.locations) {
+      if (!('hasPool' in loc)) {
+        const poolCat = loc.categories.find(c => c.hasPool);
+        if (poolCat) {
+          loc.hasPool = true;
+          loc.poolRent = poolCat.poolRent || 0;
+          delete poolCat.hasPool;
+          delete poolCat.poolRent;
+        }
+      }
+    }
   } else {
     config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
@@ -411,14 +417,15 @@ function renderForm() {
         <td data-label="Cash"><input type="number" step="any" id="cash_${id}" oninput="updateCat('${id}')" placeholder="0" style="width:100%;max-width:130px;"></td>
         <td class="ro" id="total_${id}" data-label="Total">0.00</td>
       </tr>`;
+    }
 
-      if (cat.hasPool) {
-        html += `<tr class="sub">
-          <td><strong>Pool</strong></td>
-          <td data-label="Gross"><input type="number" step="any" id="pool_${id}" oninput="updatePool('${id}', ${cat.poolRent || 0})" placeholder="Gross" style="width:100%;max-width:130px;"></td>
-          <td class="ro" id="poolTotal_${id}" data-label="Total">0.00</td>
-        </tr>`;
-      }
+    if (loc.hasPool) {
+      const locId = loc.name.replace(/\s+/g, '_');
+      html += `<tr>
+        <td><strong>Pool</strong></td>
+        <td data-label="Gross"><input type="number" step="any" id="pool_${locId}" oninput="updatePool('${locId}', ${loc.poolRent || 0})" placeholder="Gross" style="width:100%;max-width:130px;"></td>
+        <td class="ro" id="poolTotal_${locId}" data-label="Total">0.00</td>
+      </tr>`;
     }
 
     html += `</tbody><tfoot><tr><td colspan="3" class="loc-summary"><div class="loc-summary-inner">
@@ -461,9 +468,9 @@ function updateCat(id) {
   updateGrandTotals();
 }
 
-function updatePool(id, rent) {
-  const gross = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
-  document.getElementById(`poolTotal_${id}`).textContent = gross.toFixed(2);
+function updatePool(locId, rent) {
+  const gross = parseFloat(document.getElementById(`pool_${locId}`)?.value) || 0;
+  document.getElementById(`poolTotal_${locId}`).textContent = gross.toFixed(2);
   updateGrandTotals();
 }
 
@@ -479,22 +486,23 @@ function updateGrandTotals() {
       const cashLeft = total * cat.rate;
       const supplierShare = total - cashLeft;
       locTotal += total; locMGD += mgd; locSS += supplierShare; locCL += cashLeft;
+    }
 
-      if (cat.hasPool) {
-        const poolVal = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
-        const rent = cat.poolRent || 0;
-        let poolSS, poolCL;
-        if (rent > 0) {
-          poolSS = Math.min(rent, poolVal);
-          poolCL = poolVal - poolSS;
-        } else {
-          poolSS = poolVal * 0.5;
-          poolCL = poolVal * 0.5;
-        }
-        locPool += poolVal;
-        locSS += poolSS;
-        locCL += poolCL;
+    if (loc.hasPool) {
+      const locId = loc.name.replace(/\s+/g, '_');
+      const poolVal = parseFloat(document.getElementById(`pool_${locId}`)?.value) || 0;
+      const rent = loc.poolRent || 0;
+      let poolSS, poolCL;
+      if (rent > 0) {
+        poolSS = Math.min(rent, poolVal);
+        poolCL = poolVal - poolSS;
+      } else {
+        poolSS = poolVal * 0.5;
+        poolCL = poolVal * 0.5;
       }
+      locPool += poolVal;
+      locSS += poolSS;
+      locCL += poolCL;
     }
     const locId = loc.name.replace(/\s+/g, '_');
 
@@ -547,21 +555,20 @@ async function submitEntry() {
       const id = `${loc.name}_${cat.name}`.replace(/\s+/g, '_');
       const cash = parseFloat(document.getElementById(`cash_${id}`)?.value) || 0;
       const res = calcCategory(cash, cat.rate);
-      const catData = { name: cat.name, cash, ...res };
-      if (cat.hasPool) {
-        catData.poolGross = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
-        catData.poolRent = cat.poolRent || 0;
-        const rent = cat.poolRent || 0;
-        if (rent > 0) {
-          catData.poolSS = Math.min(rent, catData.poolGross);
-          catData.poolCL = catData.poolGross - catData.poolSS;
-        } else {
-          catData.poolSS = catData.poolGross * 0.5;
-          catData.poolCL = catData.poolGross * 0.5;
-        }
-        catData.dansProfit = catData.poolGross - catData.poolRent;
+      locData.categories.push({ name: cat.name, cash, ...res });
+    }
+    if (loc.hasPool) {
+      const locId = loc.name.replace(/\s+/g, '_');
+      locData.poolGross = parseFloat(document.getElementById(`pool_${locId}`)?.value) || 0;
+      locData.poolRent = loc.poolRent || 0;
+      const rent = loc.poolRent || 0;
+      if (rent > 0) {
+        locData.poolSS = Math.min(rent, locData.poolGross);
+        locData.poolCL = locData.poolGross - locData.poolSS;
+      } else {
+        locData.poolSS = locData.poolGross * 0.5;
+        locData.poolCL = locData.poolGross * 0.5;
       }
-      locData.categories.push(catData);
     }
     entry.locations.push(locData);
   }
@@ -733,6 +740,12 @@ function showMonthlySummary() {
         }
         locTotals[loc.name].pool += (cat.poolGross || 0);
       }
+      // Handle location-level pool data (new format)
+      if (loc.poolGross) {
+        locTotals[loc.name].ss += (loc.poolSS || 0);
+        locTotals[loc.name].cl += (loc.poolCL || 0);
+        locTotals[loc.name].pool += loc.poolGross;
+      }
     }
   }
 
@@ -794,6 +807,9 @@ function renderSettings() {
     for (const cat of loc.categories) {
       html += `<label>${cat.name} rate (cash left): <input type="number" step="0.01" min="0" max="1" value="${cat.rate}" onchange="updateRate('${loc.name.replace(/'/g, "\\'")}', '${cat.name.replace(/'/g, "\\'")}', this.value)"> (${((1-cat.rate)*100).toFixed(0)}% supplier)</label>`;
     }
+    if (loc.hasPool) {
+      html += `<label>Pool Rent (£): <input type="number" step="1" min="0" value="${loc.poolRent || 0}" onchange="updatePoolRent('${loc.name.replace(/'/g, "\\'")}', this.value)"></label>`;
+    }
     html += '</div>';
   }
   container.innerHTML = html;
@@ -820,6 +836,11 @@ function updateRate(locName, catName, val) {
   }
 }
 
+function updatePoolRent(locName, val) {
+  const loc = config.locations.find(l => l.name === locName);
+  if (loc) loc.poolRent = parseFloat(val) || 0;
+}
+
 function saveSettings() {
   saveConfig();
   document.getElementById('settingsMsg').textContent = 'Settings saved!';
@@ -841,6 +862,9 @@ function exportCSV() {
       for (const cat of loc.categories || []) {
         const cash = cat.cash ?? ((cat.coins || 0) + (cat.notes || 0));
         rows.push([e.date, loc.name, cat.name, cash, cat.total || 0, cat.mgd || 0, cat.supplierShare || 0, cat.cashLeft || 0, cat.poolGross || 0, '']);
+      }
+      if (loc.poolGross) {
+        rows.push([e.date, loc.name, 'Pool', loc.poolGross, loc.poolGross || 0, 0, loc.poolSS || 0, loc.poolCL || 0, loc.poolGross, '']);
       }
     }
     // Add summary row for this date
