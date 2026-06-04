@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>The List - Daily Takings</title>
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1a1a2e; }
@@ -205,7 +204,6 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
     <label style="font-size:13px;"><input type="radio" name="range" value="all" checked onchange="applyRangeFilter()"> All</label>
   </div>
   <div id="monthlySummary"></div>
-  <div id="monthlyChart" style="height:400px;"></div>
 </div>
 
 <div id="page-settings" class="page">
@@ -707,41 +705,52 @@ function showMonthlySummary() {
 
   if (filtered.length === 0) {
     document.getElementById('monthlySummary').innerHTML = '<div class="empty-state"><p>No entries for this period.</p></div>';
-    document.getElementById('monthlyChart').innerHTML = '';
     return;
   }
 
-  // Aggregate
+  // Aggregate per location
   let totalGrand = 0;
   const locTotals = {};
+  const catBreakdown = {};
 
   for (const e of filtered) {
     totalGrand += e.grandTotal || 0;
     for (const loc of e.locations || []) {
       if (!locTotals[loc.name]) locTotals[loc.name] = { total: 0, mgd: 0, ss: 0, cl: 0, pool: 0 };
+      if (!catBreakdown[loc.name]) catBreakdown[loc.name] = {};
+
       for (const cat of loc.categories || []) {
-        locTotals[loc.name].total += (cat.total || 0);
-        locTotals[loc.name].mgd += (cat.mgd || 0);
+        const cash = cat.cash ?? ((cat.coins || 0) + (cat.notes || 0));
+        locTotals[loc.name].total += cash;
+        locTotals[loc.name].mgd += cash * 0.2;
         locTotals[loc.name].ss += (cat.supplierShare || 0);
         locTotals[loc.name].cl += (cat.cashLeft || 0);
+        // Category breakdown
+        if (!catBreakdown[loc.name][cat.name]) catBreakdown[loc.name][cat.name] = 0;
+        catBreakdown[loc.name][cat.name] += cash;
+
         if (cat.poolGross) {
           const poolSS = cat.poolSS || (cat.pool50 || 0);
           const poolCL = cat.poolCL || (cat.poolGross - poolSS);
           locTotals[loc.name].ss += poolSS;
           locTotals[loc.name].cl += poolCL;
+          locTotals[loc.name].pool += cat.poolGross;
+          if (!catBreakdown[loc.name]['Pool']) catBreakdown[loc.name]['Pool'] = 0;
+          catBreakdown[loc.name]['Pool'] += cat.poolGross;
         }
-        locTotals[loc.name].pool += (cat.poolGross || 0);
       }
-      // Handle location-level pool data (new format)
+      // Location-level pool (new format)
       if (loc.poolGross) {
         locTotals[loc.name].ss += (loc.poolSS || 0);
         locTotals[loc.name].cl += (loc.poolCL || 0);
         locTotals[loc.name].pool += loc.poolGross;
+        if (!catBreakdown[loc.name]['Pool']) catBreakdown[loc.name]['Pool'] = 0;
+        catBreakdown[loc.name]['Pool'] += loc.poolGross;
       }
     }
   }
 
-  // Derive top-level aggregates from locTotals
+  // Derive top-level aggregates
   let totalMGD = 0, totalSS = 0, totalCL = 0, totalPool = 0;
   for (const v of Object.values(locTotals)) {
     totalMGD += v.mgd; totalSS += v.ss; totalCL += v.cl; totalPool += v.pool;
@@ -754,7 +763,8 @@ function showMonthlySummary() {
     <div class="kpi"><div class="val">£${totalSS.toFixed(2)}</div><div class="lbl">Supplier Share</div></div>
   </div>`;
 
-  html += `<div class="table-scroll"><table class="tbl"><thead><tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
+  // Per-location summary table
+  html += `<div style="margin-top:16px;"><h2>Totals per Location</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
   for (const [name, vals] of Object.entries(locTotals)) {
     html += `<tr><td>${name}</td><td class="ro">£${vals.total.toFixed(2)}</td><td class="ro">£${vals.mgd.toFixed(2)}</td><td class="ro">£${vals.ss.toFixed(2)}</td><td class="ro">£${vals.cl.toFixed(2)}</td><td class="ro">£${vals.pool.toFixed(2)}</td></tr>`;
   }
@@ -766,27 +776,59 @@ function showMonthlySummary() {
     <td class="ro">£${totalPool.toFixed(2)}</td>
   </tr></tbody></table></div>`;
 
-  // Monthly breakdown
+  // Per-location category breakdown
+  html += `<div style="margin-top:16px;"><h2>Category Breakdown per Location</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Location</th>`;
+  const allCatNames = [];
+  for (const loc of config.locations) {
+    for (const cat of loc.categories) {
+      if (!allCatNames.includes(cat.name)) allCatNames.push(cat.name);
+    }
+    if (loc.hasPool && !allCatNames.includes('Pool')) allCatNames.push('Pool');
+  }
+  for (const n of allCatNames) html += `<th>${n}</th>`;
+  html += `<th>Total</th></tr></thead><tbody>`;
+  for (const loc of config.locations) {
+    const bd = catBreakdown[loc.name] || {};
+    let rowTotal = 0;
+    html += `<tr><td>${loc.name}</td>`;
+    for (const n of allCatNames) {
+      const v = bd[n] || 0;
+      html += `<td class="ro">£${v.toFixed(2)}</td>`;
+      rowTotal += v;
+    }
+    html += `<td class="ro">£${rowTotal.toFixed(2)}</td></tr>`;
+  }
+  html += '</tbody></table></div>';
+
+  // Monthly breakdown with Supplier Share
   const monthlyMap = {};
   for (const e of filtered) {
     const m = e.date.substring(0, 7);
-    if (!monthlyMap[m]) monthlyMap[m] = { grand: 0, cl: 0, count: 0 };
+    if (!monthlyMap[m]) monthlyMap[m] = { grand: 0, cl: 0, ss: 0, count: 0 };
     monthlyMap[m].grand += e.grandTotal || 0;
     monthlyMap[m].cl += e.grandCL || 0;
+    // Calculate SS per entry
+    let entrySS = 0;
+    for (const loc of e.locations || []) {
+      for (const cat of loc.categories || []) {
+        entrySS += (cat.supplierShare || 0);
+        if (cat.poolGross) {
+          const poolSS = cat.poolSS || (cat.pool50 || 0);
+          entrySS += poolSS;
+        }
+      }
+      if (loc.poolSS) entrySS += loc.poolSS;
+    }
+    monthlyMap[m].ss += entrySS;
     monthlyMap[m].count++;
   }
-  html += `<div style="margin-top:16px;"><h2>Monthly Breakdown</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Month</th><th>Days</th><th>Grand Total</th><th>Cash Left</th></tr></thead><tbody>`;
+  html += `<div style="margin-top:16px;"><h2>Monthly Breakdown</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Month</th><th>Days</th><th>Grand Total</th><th>Supplier Share</th><th>Cash Left</th></tr></thead><tbody>`;
   for (const [m, v] of Object.entries(monthlyMap).sort()) {
-    html += `<tr><td>${m}</td><td>${v.count}</td><td class="ro">£${v.grand.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td></tr>`;
+    html += `<tr><td>${m}</td><td>${v.count}</td><td class="ro">£${v.grand.toFixed(2)}</td><td class="ro">£${v.ss.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td></tr>`;
   }
   html += '</tbody></table></div>';
 
   document.getElementById('monthlySummary').innerHTML = html;
-
-  // Daily breakdown chart
-  const trace1 = { x: filtered.map(e => e.date), y: filtered.map(e => e.grandTotal || 0), type: 'bar', name: 'Grand Total', marker: { color: '#667eea' } };
-  const layout = { title: `Daily Totals (${label})`, barmode: 'group', template: 'plotly_white', hovermode: 'x' };
-  Plotly.newPlot('monthlyChart', [trace1], layout);
 }
 
 // ===== SETTINGS =====
