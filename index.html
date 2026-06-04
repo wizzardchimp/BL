@@ -550,7 +550,14 @@ async function submitEntry() {
       if (cat.hasPool) {
         catData.poolGross = parseFloat(document.getElementById(`pool_${id}`)?.value) || 0;
         catData.poolRent = cat.poolRent || 0;
-        catData.pool50 = catData.poolGross * 0.5;
+        const rent = cat.poolRent || 0;
+        if (rent > 0) {
+          catData.poolSS = Math.min(rent, catData.poolGross);
+          catData.poolCL = catData.poolGross - catData.poolSS;
+        } else {
+          catData.poolSS = catData.poolGross * 0.5;
+          catData.poolCL = catData.poolGross * 0.5;
+        }
         catData.dansProfit = catData.poolGross - catData.poolRent;
       }
       locData.categories.push(catData);
@@ -687,12 +694,11 @@ function showMonthlySummary() {
   }
 
   // Aggregate
-  let totalMGD = 0, totalSS = 0, totalCL = 0, totalPool = 0, totalGrand = 0;
+  let totalGrand = 0;
   const locTotals = {};
 
   for (const e of filtered) {
     totalGrand += e.grandTotal || 0;
-    totalCL += e.grandCL || 0;
     for (const loc of e.locations || []) {
       if (!locTotals[loc.name]) locTotals[loc.name] = { total: 0, mgd: 0, ss: 0, cl: 0, pool: 0 };
       for (const cat of loc.categories || []) {
@@ -700,12 +706,21 @@ function showMonthlySummary() {
         locTotals[loc.name].mgd += (cat.mgd || 0);
         locTotals[loc.name].ss += (cat.supplierShare || 0);
         locTotals[loc.name].cl += (cat.cashLeft || 0);
+        if (cat.poolGross) {
+          const poolSS = cat.poolSS || (cat.pool50 || 0);
+          const poolCL = cat.poolCL || (cat.poolGross - poolSS);
+          locTotals[loc.name].ss += poolSS;
+          locTotals[loc.name].cl += poolCL;
+        }
         locTotals[loc.name].pool += (cat.poolGross || 0);
-        totalMGD += (cat.mgd || 0);
-        totalSS += (cat.supplierShare || 0);
-        totalPool += (cat.poolGross || 0);
       }
     }
+  }
+
+  // Derive top-level aggregates from locTotals
+  let totalMGD = 0, totalSS = 0, totalCL = 0, totalPool = 0;
+  for (const v of Object.values(locTotals)) {
+    totalMGD += v.mgd; totalSS += v.ss; totalCL += v.cl; totalPool += v.pool;
   }
 
   let html = `<div class="summary-card">
