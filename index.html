@@ -238,13 +238,13 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 const DEFAULT_CONFIG = {
   locations: [
     {
-      name: 'Albert Telford', hasPool: true, poolRent: 100, categories: [
+      name: 'Albert T', hasPool: true, poolRent: 100, categories: [
         { name: 'Reels', rate: 0.6 },
         { name: 'Digital', rate: 0.5 }
       ]
     },
     {
-      name: 'Albert Shrew', categories: [
+      name: 'Albert S', categories: [
         { name: 'Reels', rate: 0.6 },
         { name: 'Digital', rate: 0.5 }
       ]
@@ -256,13 +256,13 @@ const DEFAULT_CONFIG = {
       ]
     },
     {
-      name: 'Coolock', categories: [
+      name: 'C-lock', categories: [
         { name: 'Reels', rate: 0.6 },
         { name: 'Digital', rate: 0.5 }
       ]
     },
     {
-      name: 'Next Door Bar', categories: [
+      name: 'NDB', categories: [
         { name: 'Reels', rate: 0.5 }
       ]
     }
@@ -277,6 +277,7 @@ function loadConfig() {
     config = JSON.parse(saved);
     // Migrate old configs: move hasPool/poolRent from category to location
     for (const loc of config.locations) {
+      if (LOCATION_RENAME[loc.name]) loc.name = LOCATION_RENAME[loc.name];
       if (!('hasPool' in loc)) {
         const poolCat = loc.categories.find(c => c.hasPool);
         if (poolCat) {
@@ -316,12 +317,23 @@ function setApiUrl(url) {
   localStorage.setItem('list_api_url', url);
 }
 
+const LOCATION_RENAME = { 'Albert Telford': 'Albert T', 'Albert Shrew': 'Albert S', 'Coolock': 'C-lock', 'Next Door Bar': 'NDB' };
+
+function migrateEntryLocations() {
+  for (const e of cachedEntries) {
+    for (const loc of e.locations || []) {
+      if (LOCATION_RENAME[loc.name]) loc.name = LOCATION_RENAME[loc.name];
+    }
+  }
+}
+
 async function loadEntries() {
   const url = getApiUrl();
   if (!url) { cachedEntries = []; entriesLoaded = true; return []; }
   try {
     const r = await fetch(url);
     cachedEntries = await r.json();
+    migrateEntryLocations();
     entriesLoaded = true;
     return cachedEntries;
   } catch(e) {
