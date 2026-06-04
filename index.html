@@ -30,6 +30,9 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 .tbl input[type="number"]:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 2px rgba(102,126,234,.2); }
 .tbl .ro { color: #666; text-align: right; padding-right: 8px; font-variant-numeric: tabular-nums; font-size: 12px; }
 .tbl .loc-name { font-weight: 600; color: #16213e; }
+/* Grand Totals: right-align numeric headers */
+.tbl:not(.entry-table) thead tr:last-child th { text-align: right; }
+.tbl:not(.entry-table) thead tr:last-child th:first-child { text-align: left; }
 .entry-table tfoot td.loc-summary { background: #f0f2ff; font-weight: 700; font-size: 12px; padding: 6px 10px; white-space: nowrap; }
 .entry-table tfoot td.loc-summary > span { margin-right: 20px; }
 .entry-table tfoot td.loc-summary .ls-lbl { font-weight: 700; color: #333; }
@@ -439,28 +442,7 @@ function renderForm() {
   </tr>`;
   html += '</tbody></table></div>';
 
-  // Bottom settlement section
-  html += `<div class="table-scroll"><table class="tbl"><thead><tr><th colspan="4" style="background:#1a1a2e;">Settlement</th></tr>
-    <tr><th>Party</th><th>Partner's Pay</th><th>Label</th><th>Our Cut</th></tr></thead><tbody>
-    <tr><td>Dan</td><td><input type="number" step="any" id="settle_dan" value="0" style="width:100px;"></td><td>Dans Pay</td><td class="ro" id="settle_dan_our">0.00</td></tr>
-    <tr><td>Fusion</td><td><input type="number" step="any" id="settle_fusion" value="0" style="width:100px;"></td><td>Fusion Pay</td><td class="ro" id="settle_fusion_our">0.00</td></tr>
-    <tr><td>Coolock</td><td><input type="number" step="any" id="settle_coolock" value="0" style="width:100px;"></td><td>Lees Cut</td><td class="ro" id="settle_coolock_our">0.00</td></tr>
-    <tr><td>NDB</td><td><input type="number" step="any" id="settle_ndb" value="0" style="width:100px;"></td><td>Michelles Cut</td><td class="ro" id="settle_ndb_our">0.00</td></tr>
-    <tr style="font-weight:700;background:#f0f2ff;">
-      <td>Our Gross</td>
-      <td class="ro" id="our_gross">0.00</td>
-      <td>Split 50%</td>
-      <td class="ro" id="our_split">0.00</td>
-    </tr>
-  </tbody></table></div>`;
-
   container.innerHTML = html;
-
-  // Add settlement input listeners
-  ['dan', 'fusion', 'coolock', 'ndb'].forEach(id => {
-    const el = document.getElementById(`settle_${id}`);
-    if (el) el.addEventListener('input', updateSettlement);
-  });
 }
 
 function updateCat(id) {
@@ -542,29 +524,6 @@ function updateGrandTotals() {
   document.getElementById('grand_ss').textContent = round(grandSS).toFixed(2);
   document.getElementById('grand_cl').textContent = round(grandCL).toFixed(2);
   document.getElementById('grand_pool').textContent = round(grandPool).toFixed(2);
-
-  updateSettlement();
-}
-
-function updateSettlement() {
-  const dan = parseFloat(document.getElementById('settle_dan')?.value) || 0;
-  const fusion = parseFloat(document.getElementById('settle_fusion')?.value) || 0;
-  const coolock = parseFloat(document.getElementById('settle_coolock')?.value) || 0;
-  const ndb = parseFloat(document.getElementById('settle_ndb')?.value) || 0;
-
-  const ourDan = 0 - dan;
-  const ourFusion = 0 - fusion;
-  const ourCoolock = 0 - coolock;
-  const ourNdb = 0 - ndb;
-  const ourGross = ourDan + ourFusion + ourCoolock + ourNdb;
-  const ourSplit = ourGross / 2;
-
-  document.getElementById('settle_dan_our').textContent = ourDan.toFixed(2);
-  document.getElementById('settle_fusion_our').textContent = ourFusion.toFixed(2);
-  document.getElementById('settle_coolock_our').textContent = ourCoolock.toFixed(2);
-  document.getElementById('settle_ndb_our').textContent = ourNdb.toFixed(2);
-  document.getElementById('our_gross').textContent = ourGross.toFixed(2);
-  document.getElementById('our_split').textContent = ourSplit.toFixed(2);
 }
 
 // ===== SUBMIT =====
@@ -572,7 +531,7 @@ async function submitEntry() {
   const date = document.getElementById('entryDate').value;
   if (!date) { showMsg('submitMsg', 'Please select a date', 'error'); return; }
 
-  const entry = { date, timestamp: new Date().toISOString(), locations: [], settlements: {}, grandTotal: 0 };
+  const entry = { date, timestamp: new Date().toISOString(), locations: [], grandTotal: 0 };
 
   for (const loc of config.locations) {
     const locData = { name: loc.name, categories: [] };
@@ -593,16 +552,8 @@ async function submitEntry() {
     entry.locations.push(locData);
   }
 
-  entry.settlements = {
-    dan: parseFloat(document.getElementById('settle_dan')?.value) || 0,
-    fusion: parseFloat(document.getElementById('settle_fusion')?.value) || 0,
-    coolock: parseFloat(document.getElementById('settle_coolock')?.value) || 0,
-    ndb: parseFloat(document.getElementById('settle_ndb')?.value) || 0
-  };
   entry.grandTotal = parseFloat(document.getElementById('grand_total')?.textContent) || 0;
   entry.grandCL = parseFloat(document.getElementById('grand_cl')?.textContent) || 0;
-  entry.ourGross = parseFloat(document.getElementById('our_gross')?.textContent) || 0;
-  entry.ourSplit = parseFloat(document.getElementById('our_split')?.textContent) || 0;
 
   // Check duplicate
   const dup = getEntries().find(e => e.date === date);
@@ -643,7 +594,7 @@ function showHistory() {
   }
 
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
-  let html = `<div class="table-scroll"><table class="tbl"><thead><tr><th>Date</th><th>Submitted</th><th>Grand Total</th><th>Cash Left</th><th>Our Gross</th><th>Actions</th></tr></thead><tbody>`;
+  let html = `<div class="table-scroll"><table class="tbl"><thead><tr><th>Date</th><th>Submitted</th><th>Grand Total</th><th>Cash Left</th><th>Actions</th></tr></thead><tbody>`;
   for (const e of sorted) {
     const ts = new Date(e.timestamp);
     html += `<tr>
@@ -651,7 +602,6 @@ function showHistory() {
       <td>${ts.toLocaleString()}</td>
       <td class="ro">£${(e.grandTotal || 0).toFixed(2)}</td>
       <td class="ro">£${(e.grandCL || 0).toFixed(2)}</td>
-      <td class="ro">£${(e.ourGross || 0).toFixed(2)}</td>
       <td><button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteEntry('${e.date}')">Delete</button></td>
     </tr>`;
   }
@@ -731,13 +681,12 @@ function showMonthlySummary() {
   }
 
   // Aggregate
-  let totalMGD = 0, totalSS = 0, totalCL = 0, totalPool = 0, totalGrand = 0, totalOurGross = 0;
+  let totalMGD = 0, totalSS = 0, totalCL = 0, totalPool = 0, totalGrand = 0;
   const locTotals = {};
 
   for (const e of filtered) {
     totalGrand += e.grandTotal || 0;
     totalCL += e.grandCL || 0;
-    totalOurGross += e.ourGross || 0;
     for (const loc of e.locations || []) {
       if (!locTotals[loc.name]) locTotals[loc.name] = { total: 0, mgd: 0, ss: 0, cl: 0, pool: 0 };
       for (const cat of loc.categories || []) {
@@ -758,7 +707,6 @@ function showMonthlySummary() {
     <div class="kpi"><div class="val">£${totalGrand.toFixed(2)}</div><div class="lbl">Grand Total</div></div>
     <div class="kpi"><div class="val">£${totalCL.toFixed(2)}</div><div class="lbl">Cash Left</div></div>
     <div class="kpi"><div class="val">£${totalSS.toFixed(2)}</div><div class="lbl">Supplier Share</div></div>
-    <div class="kpi"><div class="val">£${totalOurGross.toFixed(2)}</div><div class="lbl">Our Gross</div></div>
   </div>`;
 
   html += `<div class="table-scroll"><table class="tbl"><thead><tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
@@ -777,15 +725,14 @@ function showMonthlySummary() {
   const monthlyMap = {};
   for (const e of filtered) {
     const m = e.date.substring(0, 7);
-    if (!monthlyMap[m]) monthlyMap[m] = { grand: 0, cl: 0, ourGross: 0, count: 0 };
+    if (!monthlyMap[m]) monthlyMap[m] = { grand: 0, cl: 0, count: 0 };
     monthlyMap[m].grand += e.grandTotal || 0;
     monthlyMap[m].cl += e.grandCL || 0;
-    monthlyMap[m].ourGross += e.ourGross || 0;
     monthlyMap[m].count++;
   }
-  html += `<div style="margin-top:16px;"><h2>Monthly Breakdown</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Month</th><th>Days</th><th>Grand Total</th><th>Cash Left</th><th>Our Gross</th></tr></thead><tbody>`;
+  html += `<div style="margin-top:16px;"><h2>Monthly Breakdown</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Month</th><th>Days</th><th>Grand Total</th><th>Cash Left</th></tr></thead><tbody>`;
   for (const [m, v] of Object.entries(monthlyMap).sort()) {
-    html += `<tr><td>${m}</td><td>${v.count}</td><td class="ro">£${v.grand.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td><td class="ro">£${v.ourGross.toFixed(2)}</td></tr>`;
+    html += `<tr><td>${m}</td><td>${v.count}</td><td class="ro">£${v.grand.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td></tr>`;
   }
   html += '</tbody></table></div>';
 
@@ -793,9 +740,8 @@ function showMonthlySummary() {
 
   // Daily breakdown chart
   const trace1 = { x: filtered.map(e => e.date), y: filtered.map(e => e.grandTotal || 0), type: 'bar', name: 'Grand Total', marker: { color: '#667eea' } };
-  const trace2 = { x: filtered.map(e => e.date), y: filtered.map(e => e.ourGross || 0), type: 'bar', name: 'Our Gross', marker: { color: '#48bb78' } };
   const layout = { title: `Daily Totals (${label})`, barmode: 'group', template: 'plotly_white', hovermode: 'x' };
-  Plotly.newPlot('monthlyChart', [trace1, trace2], layout);
+  Plotly.newPlot('monthlyChart', [trace1], layout);
 }
 
 // ===== SETTINGS =====
@@ -848,16 +794,16 @@ function exportCSV() {
   if (entries.length === 0) { alert('No entries to export.'); return; }
 
   const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-  const rows = [['Date', 'Location', 'Category', 'Coins', 'Notes', 'Total', 'MGD', 'Supplier Share', 'Cash Left', 'Pool Gross', 'Grand Total', 'Our Gross']];
+  const rows = [['Date', 'Location', 'Category', 'Coins', 'Notes', 'Total', 'MGD', 'Supplier Share', 'Cash Left', 'Pool Gross', 'Grand Total']];
 
   for (const e of sorted) {
     for (const loc of e.locations || []) {
       for (const cat of loc.categories || []) {
-        rows.push([e.date, loc.name, cat.name, cat.coins || 0, cat.notes || 0, cat.total || 0, cat.mgd || 0, cat.supplierShare || 0, cat.cashLeft || 0, cat.poolGross || 0, '', '']);
+        rows.push([e.date, loc.name, cat.name, cat.coins || 0, cat.notes || 0, cat.total || 0, cat.mgd || 0, cat.supplierShare || 0, cat.cashLeft || 0, cat.poolGross || 0, '']);
       }
     }
     // Add summary row for this date
-    rows.push([e.date, 'SUMMARY', '', '', '', e.grandTotal || 0, '', '', e.grandCL || 0, '', '', e.ourGross || 0]);
+    rows.push([e.date, 'SUMMARY', '', '', '', e.grandTotal || 0, '', '', e.grandCL || 0, '', '']);
   }
 
   const csv = rows.map(r => r.map(v => typeof v === 'string' && v.includes(',') ? `"${v}"` : v).join(',')).join('\n');
