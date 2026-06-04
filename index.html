@@ -33,8 +33,9 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 /* Grand Totals: right-align numeric headers */
 .tbl:not(.entry-table) thead tr:last-child th { text-align: right; }
 .tbl:not(.entry-table) thead tr:last-child th:first-child { text-align: left; }
-.entry-table tfoot td.loc-summary { background: #f0f2ff; font-weight: 700; font-size: 12px; padding: 6px 10px; display: flex; justify-content: space-between; }
-.entry-table tfoot td.loc-summary > span { margin-right: 0; }
+.entry-table tfoot td.loc-summary { background: #f0f2ff; padding: 0; }
+.loc-summary-inner { display: flex; justify-content: space-between; font-weight: 700; font-size: 12px; padding: 6px 10px; }
+.loc-summary-inner > span { white-space: nowrap; }
 .entry-table tfoot td.loc-summary .ls-lbl { font-weight: 700; color: #333; }
 .btn { padding: 10px 18px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500; min-height: 40px; -webkit-tap-highlight-color: transparent; }
 .btn-primary { background: #667eea; color: white; }
@@ -109,7 +110,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 
   .entry-table tbody td { padding: 3px 4px; border: none; }
   /* Single row: Category | Coins | Notes | Total */
-  .entry-table tbody td:nth-child(1) { grid-column: 1; font-weight: 600; font-size: 13px; display: flex; align-items: center; }
+  .entry-table tbody td:nth-child(1) { grid-column: 1; font-weight: 600; font-size: 13px; }
   .entry-table tbody td:nth-child(2) { grid-column: 2; }
   .entry-table tbody td:nth-child(3) { grid-column: 3; }
   .entry-table tbody td:nth-child(4) { grid-column: 4; }
@@ -136,16 +137,20 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .entry-table tbody tr.sub td:nth-child(3) { grid-column: 4; }
 
   /* Location summary footer: equal-spread flex row */
-  .entry-table tfoot td.loc-summary {
+  .entry-table tfoot td.loc-summary { padding: 0; }
+  .loc-summary-inner {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 10px;
     justify-content: space-between;
+    gap: 4px 6px;
     font-size: 13px;
+    font-weight: 700;
     padding: 8px 10px;
+    width: 100%;
+    box-sizing: border-box;
   }
-  .entry-table tfoot td.loc-summary > span { margin-right: 0; }
-  .entry-table tfoot td.loc-summary .ls-lbl {
+  .loc-summary-inner > span { white-space: nowrap; }
+  .loc-summary-inner .ls-lbl {
     display: block;
     font-size: 9px;
     color: #888;
@@ -159,7 +164,8 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 @media (max-width: 400px) {
   .entry-table input[type="number"] { font-size: 15px; min-height: 34px; }
   .entry-table tbody td { font-size: 12px; }
-  .entry-table tfoot td { font-size: 12px !important; gap: 3px 8px !important; }
+  .entry-table tfoot td { font-size: 12px; }
+  .loc-summary-inner { gap: 3px 4px; font-size: 12px; padding: 6px 8px; }
 }
 </style>
 </head>
@@ -411,12 +417,12 @@ function renderForm() {
       }
     }
 
-    html += `</tbody><tfoot><tr><td colspan="4" class="loc-summary">
+    html += `</tbody><tfoot><tr><td colspan="4" class="loc-summary"><div class="loc-summary-inner">
       <span><span class="ls-lbl">Total:</span> <span id="loc_total_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
       <span><span class="ls-lbl">MGD (20%):</span> <span id="loc_mgd_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
       <span><span class="ls-lbl">Supp. Share:</span> <span id="loc_ss_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
       <span><span class="ls-lbl">Cash Left:</span> <span id="loc_cl_${loc.name.replace(/\s+/g, '_')}">0.00</span></span>
-    </td></tr></tfoot></table></div>`;
+    </div></td></tr></tfoot></table></div>`;
   }
 
   // Grand Total section
