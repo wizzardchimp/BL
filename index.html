@@ -158,6 +158,44 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   .entry-table tfoot td { font-size: 12px; }
   .loc-summary-inner { gap: 3px 4px; font-size: 12px; padding: 6px 8px; }
 }
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  justify-content: center;
+  align-items: flex-start;
+  overflow-y: auto;
+  padding: 20px;
+}
+.modal-overlay.active { display: flex; }
+.modal-box {
+  background: #f5f5f5;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 700px;
+  width: 100%;
+  margin: 20px auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  position: relative;
+}
+.modal-box h2 { margin: 0 0 16px; font-size: 18px; }
+.modal-close {
+  position: absolute;
+  top: 12px; right: 16px;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  background: none;
+  border: none;
+  padding: 4px;
+  line-height: 1;
+}
+.modal-close:hover { color: #000; }
+.modal-entry { margin-bottom: 16px; background: #fff; border-radius: 8px; padding: 12px; }
+.modal-entry h3 { font-size: 14px; margin: 0 0 8px; color: #333; }
+.modal-entry table { margin: 0; }
 </style>
 </head>
 <body>
@@ -814,6 +852,7 @@ function showMonthlySummary() {
 
   // Monthly breakdown with Supplier Share
   const monthlyMap = {};
+  const monthEntries = {};
   for (const e of filtered) {
     const m = e.date.substring(0, 7);
     if (!monthlyMap[m]) monthlyMap[m] = { grand: 0, cl: 0, ss: 0, count: 0 };
@@ -833,10 +872,12 @@ function showMonthlySummary() {
     }
     monthlyMap[m].ss += entrySS;
     monthlyMap[m].count++;
+    if (!monthEntries[m]) monthEntries[m] = [];
+    monthEntries[m].push(e);
   }
-  html += `<div style="margin-top:16px;"><h2>Monthly Breakdown</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Month</th><th>Days</th><th>Grand Total</th><th>Supplier Share</th><th>Cash Left</th></tr></thead><tbody>`;
+  html += `<div style="margin-top:16px;"><h2>Monthly Breakdown</h2><div class="table-scroll"><table class="tbl"><thead><tr><th>Month</th><th>Days</th><th>Grand Total</th><th>Supplier Share</th><th>Cash Left</th><th></th></tr></thead><tbody>`;
   for (const [m, v] of Object.entries(monthlyMap).sort()) {
-    html += `<tr><td>${m}</td><td>${v.count}</td><td class="ro">£${v.grand.toFixed(2)}</td><td class="ro">£${v.ss.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td></tr>`;
+    html += `<tr><td>${m}</td><td>${v.count}</td><td class="ro">£${v.grand.toFixed(2)}</td><td class="ro">£${v.ss.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td><td><button class="btn" style="padding:3px 10px;font-size:12px;" onclick="viewMonth('${m}')">View</button></td></tr>`;
   }
   html += '</tbody></table></div>';
 
@@ -927,6 +968,48 @@ function exportCSV() {
   URL.revokeObjectURL(url);
 }
 
+// ===== MONTHLY SUMMARY — VIEW MONTH =====
+function viewMonth(month) {
+  const entries = getEntries()
+    .filter(e => e.date.substring(0, 7) === month)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  document.getElementById('monthModalTitle').textContent = month;
+
+  let html = '';
+  for (const e of entries) {
+    html += `<div class="modal-entry"><h3>${e.date}</h3><table class="tbl"><thead><tr><th>Location</th><th>Category</th><th>Cash</th><th>Total</th><th>MGD</th><th>Supp. Share</th><th>Cash Left</th></tr></thead><tbody>`;
+    for (const loc of e.locations || []) {
+      for (const cat of loc.categories || []) {
+        const cash = cat.cash ?? ((cat.coins || 0) + (cat.notes || 0));
+        html += `<tr><td>${loc.name}</td><td>${cat.name}</td><td class="ro">£${cash.toFixed(2)}</td><td class="ro">£${(cat.total || 0).toFixed(2)}</td><td class="ro">£${(cat.mgd || 0).toFixed(2)}</td><td class="ro">£${(cat.supplierShare || 0).toFixed(2)}</td><td class="ro">£${(cat.cashLeft || 0).toFixed(2)}</td></tr>`;
+      }
+      if (loc.poolGross) {
+        html += `<tr><td>${loc.name}</td><td>Pool</td><td class="ro">£${loc.poolGross.toFixed(2)}</td><td class="ro">£${loc.poolGross.toFixed(2)}</td><td class="ro">£0.00</td><td class="ro">£${(loc.poolSS || 0).toFixed(2)}</td><td class="ro">£${(loc.poolCL || 0).toFixed(2)}</td></tr>`;
+      }
+    }
+    // Also check category-level pool (old format)
+    for (const loc of e.locations || []) {
+      for (const cat of loc.categories || []) {
+        if (cat.poolGross && !loc.poolGross) {
+          const poolSS = cat.poolSS || (cat.pool50 || 0);
+          const poolCL = cat.poolCL || (cat.poolGross - poolSS);
+          html += `<tr><td>${loc.name}</td><td>Pool</td><td class="ro">£${cat.poolGross.toFixed(2)}</td><td class="ro">£${cat.poolGross.toFixed(2)}</td><td class="ro">£0.00</td><td class="ro">£${poolSS.toFixed(2)}</td><td class="ro">£${poolCL.toFixed(2)}</td></tr>`;
+        }
+      }
+    }
+    html += `<tr style="font-weight:700;background:#f0f2ff;"><td colspan="2">TOTAL</td><td class="ro">—</td><td class="ro">£${(e.grandTotal || 0).toFixed(2)}</td><td class="ro">—</td><td class="ro">—</td><td class="ro">£${(e.grandCL || 0).toFixed(2)}</td></tr>`;
+    html += '</tbody></table></div>';
+  }
+
+  document.getElementById('monthModalEntries').innerHTML = html;
+  document.getElementById('monthModal').classList.add('active');
+}
+
+function closeMonthModal() {
+  document.getElementById('monthModal').classList.remove('active');
+}
+
 // ===== PAGE NAV =====
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -946,5 +1029,14 @@ loadEntries().then(() => {
   updateHistoryCount();
 });
 </script>
+
+<div id="monthModal" class="modal-overlay" onclick="if(event.target===this)closeMonthModal()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeMonthModal()">&times;</button>
+    <h2 id="monthModalTitle"></h2>
+    <div id="monthModalEntries"></div>
+  </div>
+</div>
+
 </body>
 </html>
