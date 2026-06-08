@@ -741,6 +741,8 @@ function clearRangeRadios() {
   document.querySelectorAll('input[name="range"]').forEach(r => r.checked = false);
 }
 
+let _monthlyFiltered = [];
+
 function showMonthlySummary() {
   const entries = getEntries();
   const fromVal = document.getElementById('filterFrom').value;
@@ -750,6 +752,7 @@ function showMonthlySummary() {
   if (fromVal) filtered = filtered.filter(e => e.date >= fromVal);
   if (toVal) filtered = filtered.filter(e => e.date <= toVal);
   filtered.sort((a, b) => a.date.localeCompare(b.date));
+  _monthlyFiltered = filtered;
 
   const label = fromVal || toVal ? `${fromVal || '…'} to ${toVal || '…'}` : 'All time';
 
@@ -836,7 +839,7 @@ function showMonthlySummary() {
     if (loc.hasPool && !allCatNames.includes('Pool')) allCatNames.push('Pool');
   }
   for (const n of allCatNames) html += `<th>${n}</th>`;
-  html += `<th>Total</th></tr></thead><tbody>`;
+  html += `<th>Total</th><th></th></tr></thead><tbody>`;
   for (const loc of config.locations) {
     const bd = catBreakdown[loc.name] || {};
     let rowTotal = 0;
@@ -846,7 +849,7 @@ function showMonthlySummary() {
       html += `<td class="ro">£${v.toFixed(2)}</td>`;
       rowTotal += v;
     }
-    html += `<td class="ro">£${rowTotal.toFixed(2)}</td></tr>`;
+    html += `<td class="ro">£${rowTotal.toFixed(2)}</td><td><button class="btn" style="padding:3px 10px;font-size:12px;" onclick="viewLocationCat('${loc.name.replace(/'/g, "\\'")}')">View</button></td></tr>`;
   }
   html += '</tbody></table></div>';
 
@@ -1008,6 +1011,76 @@ function viewMonth(month) {
 
 function closeMonthModal() {
   document.getElementById('monthModal').classList.remove('active');
+}
+
+// ===== CATEGORY BREAKDOWN — VIEW LOCATION =====
+function viewLocationCat(locName) {
+  const entries = _monthlyFiltered;
+  document.getElementById('monthModalTitle').textContent = locName + ' — monthly breakdown';
+
+  // Aggregate per month for this location
+  const monthData = {};
+  const allCatNames = [];
+  const locConfig = config.locations.find(l => l.name === locName);
+  if (locConfig) {
+    for (const cat of locConfig.categories) {
+      if (!allCatNames.includes(cat.name)) allCatNames.push(cat.name);
+    }
+    if (locConfig.hasPool && !allCatNames.includes('Pool')) allCatNames.push('Pool');
+  }
+
+  for (const e of entries) {
+    const loc = (e.locations || []).find(l => l.name === locName);
+    if (!loc) continue;
+    const m = e.date.substring(0, 7);
+    if (!monthData[m]) {
+      monthData[m] = { count: 0, total: 0 };
+      for (const n of allCatNames) monthData[m][n] = 0;
+    }
+    monthData[m].count++;
+    for (const cat of loc.categories || []) {
+      const cash = cat.cash ?? ((cat.coins || 0) + (cat.notes || 0));
+      if (!(cat.name in monthData[m])) monthData[m][cat.name] = 0;
+      monthData[m][cat.name] += cash;
+      monthData[m].total += cash;
+      // Category-level pool (old format)
+      if (cat.poolGross) {
+        if (!monthData[m]['Pool']) monthData[m]['Pool'] = 0;
+        monthData[m]['Pool'] += cat.poolGross;
+        monthData[m].total += cat.poolGross;
+      }
+    }
+    // Location-level pool (new format)
+    if (loc.poolGross) {
+      if (!monthData[m]['Pool']) monthData[m]['Pool'] = 0;
+      monthData[m]['Pool'] += loc.poolGross;
+      monthData[m].total += loc.poolGross;
+    }
+  }
+
+  let html = `<div style="margin-bottom:12px;"><table class="tbl"><thead><tr><th>Month</th><th>Days</th>`;
+  for (const n of allCatNames) html += `<th>${n}</th>`;
+  html += `<th>Total</th></tr></thead><tbody>`;
+  for (const [m, v] of Object.entries(monthData).sort()) {
+    html += `<tr><td>${m}</td><td>${v.count}</td>`;
+    for (const n of allCatNames) {
+      html += `<td class="ro">£${(v[n] || 0).toFixed(2)}</td>`;
+    }
+    html += `<td class="ro">£${v.total.toFixed(2)}</td></tr>`;
+  }
+  // Total row
+  html += `<tr style="font-weight:700;background:#f0f2ff;"><td>TOTAL</td><td>${Object.values(monthData).reduce((s, v) => s + v.count, 0)}</td>`;
+  let grandTotal = 0;
+  for (const n of allCatNames) {
+    const sum = Object.values(monthData).reduce((s, v) => s + (v[n] || 0), 0);
+    html += `<td class="ro">£${sum.toFixed(2)}</td>`;
+    grandTotal += sum;
+  }
+  html += `<td class="ro">£${grandTotal.toFixed(2)}</td></tr>`;
+  html += '</tbody></table></div>';
+
+  document.getElementById('monthModalEntries').innerHTML = html;
+  document.getElementById('monthModal').classList.add('active');
 }
 
 // ===== PAGE NAV =====
