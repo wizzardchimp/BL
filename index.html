@@ -196,9 +196,54 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 .modal-entry { margin-bottom: 16px; background: #fff; border-radius: 8px; padding: 12px; }
 .modal-entry h3 { font-size: 14px; margin: 0 0 8px; color: #333; }
 .modal-entry table { margin: 0; }
+
+.login-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.login-overlay.hidden { display: none; }
+.login-box {
+  background: #fff;
+  border-radius: 16px;
+  padding: 40px 32px;
+  width: 300px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+  text-align: center;
+}
+.login-box h1 { margin: 0 0 8px; font-size: 22px; color: #1a1a2e; }
+.login-box p { margin: 0 0 24px; font-size: 13px; color: #888; }
+.login-box input {
+  width: 100%;
+  padding: 12px;
+  font-size: 18px;
+  text-align: center;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  outline: none;
+  box-sizing: border-box;
+}
+.login-box input:focus { border-color: #667eea; }
+.login-error { color: #e74c3c; font-size: 12px; margin-top: 8px; display: none; }
 </style>
 </head>
 <body>
+
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-box">
+    <h1>The List</h1>
+    <p>Enter password to continue</p>
+    <input type="password" id="loginPwd" placeholder="Password" onkeydown="if(event.key==='Enter')login()">
+    <div id="loginError" class="login-error">Incorrect password</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:12px;font-size:16px;" onclick="login()">Log In</button>
+  </div>
+</div>
+
+<script>if(sessionStorage.getItem('list_logged_in'))document.getElementById('loginOverlay').classList.add('hidden')</script>
 
 <div class="nav">
   <a class="active" onclick="showPage('entry')">Daily Entry</a>
@@ -1142,8 +1187,36 @@ function showPage(name) {
   if (name === 'settings') renderSettings();
 }
 
+// ===== LOGIN =====
+function login() {
+  const pwd = document.getElementById('loginPwd').value;
+  if (pwd !== 'bl26') {
+    document.getElementById('loginError').style.display = 'block';
+    return;
+  }
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginOverlay').classList.add('hidden');
+  sessionStorage.setItem('list_logged_in', '1');
+  // Log login event to API (best-effort)
+  const url = getApiUrl();
+  if (url) {
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'login', timestamp: new Date().toISOString() })
+    }).catch(() => {});
+  }
+}
+
+function checkLogin() {
+  if (sessionStorage.getItem('list_logged_in')) {
+    document.getElementById('loginOverlay').classList.add('hidden');
+  }
+}
+
 // ===== INIT =====
 loadConfig();
+checkLogin();
 renderForm();
 loadEntries().then(() => {
   updateHistoryCount();
