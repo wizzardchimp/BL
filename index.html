@@ -254,6 +254,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 
 <div id="page-entry" class="page active">
   <h1>Daily Takings Entry</h1>
+  <div id="totals21Container"></div>
   <div class="form-header">
     <label>Date:</label>
     <input type="date" id="entryDate">
@@ -525,43 +526,73 @@ function renderForm() {
     </div></td></tr></tfoot></table></div>`;
   }
 
-  // Grand Total section
-  html += `<div class="table-scroll"><table class="tbl"><thead><tr><th colspan="6" style="background:#1a1a2e;">Grand Totals</th></tr>
-    <tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
-  for (const loc of config.locations) {
-    const id = loc.name.replace(/\s+/g, '_');
-    html += `<tr><td>${loc.name}</td>
-      <td class="ro" id="gt_total_${id}">0.00</td>
-      <td class="ro" id="gt_mgd_${id}">0.00</td>
-      <td class="ro" id="gt_ss_${id}">0.00</td>
-      <td class="ro" id="gt_cl_${id}">0.00</td>
-      <td class="ro" id="gt_pool_${id}">0.00</td>
-    </tr>`;
-  }
-  html += `<tr style="font-weight:700;background:#f0f2ff;">
-    <td>GRAND TOTAL</td>
-    <td class="ro" id="grand_total">0.00</td>
-    <td class="ro" id="grand_mgd">0.00</td>
-    <td class="ro" id="grand_ss">0.00</td>
-    <td class="ro" id="grand_cl">0.00</td>
-    <td class="ro" id="grand_pool">0.00</td>
-  </tr>`;
-  html += '</tbody></table></div>';
-
   container.innerHTML = html;
 }
 
+function render21DayTotals() {
+  const entries = getEntries();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 21);
+  const cutoffStr = cutoff.toISOString().substring(0, 10);
+  const recent = entries.filter(e => e.date >= cutoffStr);
+
+  const locTotals = {};
+  for (const loc of config.locations) {
+    locTotals[loc.name] = { total: 0, mgd: 0, ss: 0, cl: 0, pool: 0 };
+  }
+
+  for (const e of recent) {
+    for (const loc of e.locations || []) {
+      const t = locTotals[loc.name];
+      if (!t) continue;
+      for (const cat of loc.categories || []) {
+        const cash = cat.cash ?? ((cat.coins || 0) + (cat.notes || 0));
+        t.total += cash;
+        t.mgd += cash * 0.2;
+        t.ss += (cat.supplierShare || 0);
+        t.cl += (cat.cashLeft || 0);
+        if (cat.poolGross) {
+          const poolSS = cat.poolSS || (cat.pool50 || 0);
+          const poolCL = cat.poolCL || (cat.poolGross - poolSS);
+          t.ss += poolSS;
+          t.cl += poolCL;
+          t.pool += cat.poolGross;
+          t.total += cat.poolGross;
+        }
+      }
+      if (loc.poolGross) {
+        t.pool += loc.poolGross;
+        t.ss += (loc.poolSS || 0);
+        t.cl += (loc.poolCL || 0);
+        t.total += loc.poolGross;
+      }
+    }
+  }
+
+  let html = `<div class="table-scroll"><table class="tbl"><thead><tr><th colspan="6" style="background:#1a1a2e;">Last 21 Days — Totals</th></tr>
+    <tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
+  let grandTotal = 0, grandMGD = 0, grandSS = 0, grandCL = 0, grandPool = 0;
+  for (const loc of config.locations) {
+    const v = locTotals[loc.name];
+    html += `<tr><td>${loc.name}</td><td class="ro">£${v.total.toFixed(2)}</td><td class="ro">£${v.mgd.toFixed(2)}</td><td class="ro">£${v.ss.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td><td class="ro">£${v.pool.toFixed(2)}</td></tr>`;
+    grandTotal += v.total; grandMGD += v.mgd; grandSS += v.ss; grandCL += v.cl; grandPool += v.pool;
+  }
+  html += `<tr style="font-weight:700;background:#f0f2ff;">
+    <td>${recent.length} days</td><td class="ro">£${grandTotal.toFixed(2)}</td><td class="ro">£${grandMGD.toFixed(2)}</td><td class="ro">£${grandSS.toFixed(2)}</td><td class="ro">£${grandCL.toFixed(2)}</td><td class="ro">£${grandPool.toFixed(2)}</td>
+  </tr></tbody></table></div>`;
+
+  document.getElementById('totals21Container').innerHTML = html;
+}
+
 function updateCat(id) {
-  updateGrandTotals();
+  updateLocationFooters();
 }
 
 function updatePool(locId, rent) {
-  updateGrandTotals();
+  updateLocationFooters();
 }
 
-function updateGrandTotals() {
-  let grandTotal = 0, grandMGD = 0, grandSS = 0, grandCL = 0, grandPool = 0;
-
+function updateLocationFooters() {
   for (const loc of config.locations) {
     let locTotal = 0, locMGD = 0, locSS = 0, locCL = 0, locPool = 0;
     for (const cat of loc.categories) {
@@ -600,31 +631,7 @@ function updateGrandTotals() {
     if (ls) ls.textContent = round(locSS).toFixed(2);
     const lc = document.getElementById(`loc_cl_${locId}`);
     if (lc) lc.textContent = round(locCL).toFixed(2);
-
-    // Update grand totals table
-    const gtT = document.getElementById(`gt_total_${locId}`);
-    const gtM = document.getElementById(`gt_mgd_${locId}`);
-    const gtS = document.getElementById(`gt_ss_${locId}`);
-    const gtC = document.getElementById(`gt_cl_${locId}`);
-    const gtP = document.getElementById(`gt_pool_${locId}`);
-    if (gtT) gtT.textContent = round(locTotal + locPool).toFixed(2);
-    if (gtM) gtM.textContent = round(locMGD).toFixed(2);
-    if (gtS) gtS.textContent = round(locSS).toFixed(2);
-    if (gtC) gtC.textContent = round(locCL).toFixed(2);
-    if (gtP) gtP.textContent = round(locPool).toFixed(2);
-
-    grandTotal += locTotal + locPool;
-    grandMGD += locMGD;
-    grandSS += locSS;
-    grandCL += locCL;
-    grandPool += locPool;
   }
-
-  document.getElementById('grand_total').textContent = round(grandTotal).toFixed(2);
-  document.getElementById('grand_mgd').textContent = round(grandMGD).toFixed(2);
-  document.getElementById('grand_ss').textContent = round(grandSS).toFixed(2);
-  document.getElementById('grand_cl').textContent = round(grandCL).toFixed(2);
-  document.getElementById('grand_pool').textContent = round(grandPool).toFixed(2);
 }
 
 // ===== SUBMIT =====
@@ -658,8 +665,28 @@ async function submitEntry() {
     entry.locations.push(locData);
   }
 
-  entry.grandTotal = parseFloat(document.getElementById('grand_total')?.textContent) || 0;
-  entry.grandCL = parseFloat(document.getElementById('grand_cl')?.textContent) || 0;
+  // Calculate grand totals from entry data
+  let calcTotal = 0, calcCL = 0;
+  for (const loc of entry.locations) {
+    for (const cat of loc.categories || []) {
+      const cash = cat.cash ?? ((cat.coins || 0) + (cat.notes || 0));
+      calcTotal += cash;
+      calcCL += (cat.cashLeft || 0);
+    }
+    if (loc.poolGross) {
+      calcTotal += loc.poolGross;
+      calcCL += (loc.poolCL || 0);
+    } else {
+      for (const cat of loc.categories || []) {
+        if (cat.poolGross) {
+          calcTotal += cat.poolGross;
+          calcCL += (cat.poolCL || 0);
+        }
+      }
+    }
+  }
+  entry.grandTotal = round(calcTotal);
+  entry.grandCL = round(calcCL);
 
   // Check duplicate
   const dup = getEntries().find(e => e.date === date);
@@ -674,6 +701,7 @@ async function submitEntry() {
   }
   updateHistoryCount();
   showHistory();
+  render21DayTotals();
 }
 
 function resetForm() {
@@ -728,6 +756,7 @@ async function deleteEntry(date) {
   }
   showHistory();
   updateHistoryCount();
+  render21DayTotals();
 }
 
 function deleteLastSubmission() {
@@ -746,6 +775,7 @@ function deleteLastSubmission() {
     el.className = 'msg success';
     setTimeout(() => el.className = 'msg', 3000);
     updateHistoryCount();
+    render21DayTotals();
   });
 }
 
@@ -764,6 +794,7 @@ async function clearHistory() {
   cachedEntries = [];
   showHistory();
   updateHistoryCount();
+  render21DayTotals();
 }
 
 // ===== MONTHLY SUMMARY =====
@@ -1220,6 +1251,7 @@ checkLogin();
 renderForm();
 loadEntries().then(() => {
   updateHistoryCount();
+  render21DayTotals();
 });
 </script>
 
