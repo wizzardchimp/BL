@@ -481,8 +481,22 @@ function setApiUrl(url) {
 
 const LOCATION_RENAME = { 'Albert Telford': 'Albert T', 'Albert Shrew': 'Albert S', 'Coolock': 'C-lock', 'Next Door Bar': 'NDB' };
 
+function normalizeEntryDate(d) {
+  if (!d) return d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return String(d);
+  const parsed = new Date(d);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return String(d);
+}
+
 function migrateEntryLocations() {
   for (const e of cachedEntries) {
+    e.date = normalizeEntryDate(e.date);
     for (const loc of e.locations || []) {
       if (LOCATION_RENAME[loc.name]) loc.name = LOCATION_RENAME[loc.name];
     }

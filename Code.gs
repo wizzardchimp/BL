@@ -50,6 +50,21 @@ function writeConfig(config) {
   sheet.appendRow([JSON.stringify(config)]);
 }
 
+function normalizeDate(val) {
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  const s = String(val || '').trim();
+  // Already yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // Parse other formats (e.g. "Thu Jan 01 2099 ...")
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return s;
+}
+
 function readEntries() {
   const sheet = getSheet();
   const data = sheet.getDataRange().getValues();
@@ -58,14 +73,7 @@ function readEntries() {
     const row = data[i];
     try {
       const entry = JSON.parse(row[2]);
-      // Normalize date to yyyy-mm-dd string
-      let d = row[0];
-      if (d instanceof Date) {
-        d = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      } else {
-        d = String(d);
-      }
-      entry.date = d;
+      entry.date = normalizeDate(row[0]);
       entry.timestamp = row[1] instanceof Date
         ? row[1].toISOString()
         : String(row[1]);
@@ -106,12 +114,9 @@ function doPost(e) {
     if (body.action === 'delete') {
       const sheet = getSheet();
       const data = sheet.getDataRange().getValues();
+      const targetDate = normalizeDate(body.date);
       for (let i = data.length - 1; i >= 1; i--) {
-        const rowDate = data[i][0];
-        let rowDateStr = rowDate instanceof Date
-          ? Utilities.formatDate(rowDate, Session.getScriptTimeZone(), 'yyyy-MM-dd')
-          : String(rowDate);
-        const targetDate = String(body.date);
+        const rowDateStr = normalizeDate(data[i][0]);
         if (rowDateStr === targetDate) {
           sheet.deleteRow(i + 1);
           return ContentService.createTextOutput(JSON.stringify({ success: true }))
@@ -134,18 +139,15 @@ function doPost(e) {
 
     // Default: save entry
     const sheet = getSheet();
-    const { date, ...rest } = body;
+    const date = normalizeDate(body.date);
+    const { date: _drop, ...rest } = body;
     const dataStr = JSON.stringify(rest);
     const existing = sheet.getDataRange().getValues();
     let updated = false;
     for (let i = 1; i < existing.length; i++) {
-      let rowDate = existing[i][0];
-      if (rowDate instanceof Date) {
-        rowDate = Utilities.formatDate(rowDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      } else {
-        rowDate = String(rowDate);
-      }
+      const rowDate = normalizeDate(existing[i][0]);
       if (rowDate === date) {
+        sheet.getRange(i + 1, 1).setValue(date);
         sheet.getRange(i + 1, 2).setValue(new Date().toISOString());
         sheet.getRange(i + 1, 3).setValue(dataStr);
         updated = true;
