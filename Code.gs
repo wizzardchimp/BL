@@ -1,4 +1,7 @@
-const SHEET_NAME = 'Sheet1';
+// Primary daily-entry tab (your data lives here)
+const SHEET_NAME = 'Data';
+// Also try these if Data is empty / missing
+const SHEET_FALLBACKS = ['Sheet1', 'Entries'];
 const LOG_SHEET_NAME = 'LoginLog';
 const RATES_SHEET_NAME = 'Rates';
 
@@ -10,29 +13,14 @@ function getSheet() {
   const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
-    // Prefer first non-meta sheet that already has rows
-    const skip = { [LOG_SHEET_NAME]: true, [RATES_SHEET_NAME]: true };
-    const sheets = ss.getSheets();
-    for (let i = 0; i < sheets.length; i++) {
-      const s = sheets[i];
-      if (skip[s.getName()]) continue;
-      if (s.getLastRow() > 1) {
-        sheet = s;
-        break;
-      }
+    for (let i = 0; i < SHEET_FALLBACKS.length; i++) {
+      sheet = ss.getSheetByName(SHEET_FALLBACKS[i]);
+      if (sheet) break;
     }
-    if (!sheet) {
-      for (let i = 0; i < sheets.length; i++) {
-        if (!skip[sheets[i].getName()]) {
-          sheet = sheets[i];
-          break;
-        }
-      }
-    }
-    if (!sheet) {
-      sheet = ss.insertSheet(SHEET_NAME);
-      sheet.appendRow(['Date', 'Timestamp', 'Data']);
-    }
+  }
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+    sheet.appendRow(['Date', 'Timestamp', 'Data']);
   }
   return sheet;
 }
@@ -90,10 +78,7 @@ function normalizeDate(val) {
 
 function tryParseEntry(cell) {
   if (cell === null || cell === undefined || cell === '') return null;
-  if (typeof cell === 'object' && !(cell instanceof Date)) {
-    // Already an object somehow
-    return cell;
-  }
+  if (typeof cell === 'object' && !(cell instanceof Date)) return cell;
   const s = String(cell).trim();
   if (!s || s.charAt(0) !== '{') return null;
   try {
@@ -115,32 +100,29 @@ function readEntriesFromSheet(sheet) {
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    // Find JSON blob in any column
     let entry = null;
-    let jsonCol = -1;
-    for (let c = 0; c < row.length; c++) {
-      entry = tryParseEntry(row[c]);
-      if (!entry) entry = tryParseEntry(display[i][c]);
-      if (entry) {
-        jsonCol = c;
-        break;
+    // Prefer column C (index 2), then scan all columns
+    if (row.length > 2) {
+      entry = tryParseEntry(row[2]) || tryParseEntry(display[i][2]);
+    }
+    if (!entry) {
+      for (let c = 0; c < row.length; c++) {
+        entry = tryParseEntry(row[c]) || tryParseEntry(display[i][c]);
+        if (entry) break;
       }
     }
     if (!entry) {
-      // Skip empty rows
       const nonempty = row.some(function (v) { return v !== '' && v !== null; });
       if (nonempty) parseErrors++;
       continue;
     }
 
-    // Date: prefer column A, then entry.date
     let d = null;
     if (row[0] !== '' && row[0] !== null) d = normalizeDate(row[0]);
     else if (display[i][0]) d = normalizeDate(display[i][0]);
-    if (!d || d === 'Invalid Date') d = normalizeDate(entry.date);
+    if (!d) d = normalizeDate(entry.date);
     entry.date = d;
 
-    // Timestamp: column B if present
     if (row.length > 1 && row[1] !== '' && row[1] !== null) {
       entry.timestamp = row[1] instanceof Date
         ? row[1].toISOString()
@@ -151,35 +133,34 @@ function readEntriesFromSheet(sheet) {
 
     entries.push(entry);
   }
-
   return { entries: entries, parseErrors: parseErrors, rows: lastRow - 1 };
 }
 
 function readEntries() {
   const ss = getSpreadsheet();
-  const skip = {};
-  skip[LOG_SHEET_NAME] = true;
-  skip[RATES_SHEET_NAME] = true;
-
-  // Prefer Sheet1 if it has parseable entries
-  let primary = ss.getSheetByName(SHEET_NAME);
-  if (primary) {
-    const r = readEntriesFromSheet(primary);
-    if (r.entries.length) return r.entries;
+  // Prefer Data, then fallbacks — use first sheet that has parseable entries
+  const names = [SHEET_NAME].concat(SHEET_FALLBACKS);
+  let best = [];
+  for (let i = 0; i < names.length; i++) {
+    const sheet = ss.getSheetByName(names[i]);
+    if (!sheet) continue;
+    const r = readEntriesFromSheet(sheet);
+    if (r.entries.length > best.length) best = r.entries;
   }
-
-  // Scan all other sheets for entry data
-  const sheets = ss.getSheets();
-  let best = { entries: [], parseErrors: 0, rows: 0, name: null };
-  for (let i = 0; i < sheets.length; i++) {
-    const s = sheets[i];
-    if (skip[s.getName()]) continue;
-    const r = readEntriesFromSheet(s);
-    if (r.entries.length > best.entries.length) {
-      best = { entries: r.entries, parseErrors: r.parseErrors, rows: r.rows, name: s.getName() };
+  // Last resort: any other non-meta sheet
+  if (!best.length) {
+    const skip = {};
+    skip[LOG_SHEET_NAME] = true;
+    skip[RATES_SHEET_NAME] = true;
+    const sheets = ss.getSheets();
+    for (let i = 0; i < sheets.length; i++) {
+      const s = sheets[i];
+      if (skip[s.getName()]) continue;
+      const r = readEntriesFromSheet(s);
+      if (r.entries.length > best.length) best = r.entries;
     }
   }
-  return best.entries;
+  return best;
 }
 
 function sheetDiagnostics() {
@@ -192,18 +173,21 @@ function sheetDiagnostics() {
     const lastCol = s.getLastColumn();
     let sample = [];
     if (lastRow >= 1 && lastCol >= 1) {
-      const vals = s.getRange(1, 1, Math.min(lastRow, 3), Math.min(lastCol, 4)).getDisplayValues();
-      sample = vals;
+      sample = s.getRange(1, 1, Math.min(lastRow, 3), Math.min(lastCol, 4)).getDisplayValues();
     }
-    const r = (s.getName() === LOG_SHEET_NAME || s.getName() === RATES_SHEET_NAME)
-      ? { entries: [], parseErrors: 0, rows: lastRow }
-      : readEntriesFromSheet(s);
+    let parsed = 0;
+    let parseErrors = 0;
+    if (s.getName() !== LOG_SHEET_NAME && s.getName() !== RATES_SHEET_NAME) {
+      const r = readEntriesFromSheet(s);
+      parsed = r.entries.length;
+      parseErrors = r.parseErrors;
+    }
     out.push({
       name: s.getName(),
       lastRow: lastRow,
       lastCol: lastCol,
-      parsedEntries: r.entries ? r.entries.length : 0,
-      parseErrors: r.parseErrors || 0,
+      parsedEntries: parsed,
+      parseErrors: parseErrors,
       sample: sample
     });
   }
@@ -216,12 +200,12 @@ function doGet(e) {
     return ContentService.createTextOutput(JSON.stringify({
       spreadsheet: getSpreadsheet().getName(),
       spreadsheetId: getSpreadsheet().getId(),
+      primarySheet: SHEET_NAME,
       sheets: sheetDiagnostics(),
       entries: readEntries(),
       config: readConfig()
     })).setMimeType(ContentService.MimeType.JSON);
   }
-
   return ContentService.createTextOutput(JSON.stringify({
     entries: readEntries(),
     config: readConfig()
@@ -250,7 +234,6 @@ function doPost(e) {
     }
 
     if (body.action === 'delete') {
-      // Delete from any sheet that has the date
       const ss = getSpreadsheet();
       const skip = {};
       skip[LOG_SHEET_NAME] = true;
@@ -262,9 +245,8 @@ function doPost(e) {
         if (skip[sheet.getName()]) continue;
         const data = sheet.getDataRange().getValues();
         for (let i = data.length - 1; i >= 1; i--) {
-          // Match by col A date OR JSON date
           let rowDateStr = normalizeDate(data[i][0]);
-          if (!rowDateStr || rowDateStr === String(data[i][0])) {
+          if (!rowDateStr) {
             for (let c = 0; c < data[i].length; c++) {
               const ent = tryParseEntry(data[i][c]);
               if (ent && ent.date) {
@@ -294,9 +276,8 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Default: save entry onto primary data sheet
+    // Default: save entry onto Data tab
     const sheet = getSheet();
-    // Ensure header row exists
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(['Date', 'Timestamp', 'Data']);
     }
