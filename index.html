@@ -582,8 +582,9 @@ async function saveEntry(entry) {
     });
     const result = await r.json();
     if (result.success) {
-      // Update cache: remove existing entry for this date, add new one
-      cachedEntries = cachedEntries.filter(e => e.date !== entry.date);
+      if (result.id) entry.id = result.id;
+      if (result.timestamp) entry.timestamp = result.timestamp;
+      // Always keep new entry — same date is allowed
       cachedEntries.push(entry);
       return true;
     }
@@ -596,20 +597,39 @@ async function saveEntry(entry) {
   }
 }
 
-async function deleteEntryFromSheet(date) {
-  // For delete, we POST with a special action
+function entryKey(e) {
+  return e.id || e.timestamp || (e.date + '|' + (e.grandTotal || 0));
+}
+
+async function deleteEntryFromSheet(entry) {
   const url = getApiUrl();
   if (!url) return false;
+  const payload = { action: 'delete' };
+  if (typeof entry === 'string') {
+    // legacy: date only
+    payload.date = entry;
+  } else {
+    if (entry.id) payload.id = entry.id;
+    if (entry.timestamp) payload.timestamp = entry.timestamp;
+    if (entry.date) payload.date = entry.date;
+  }
   showLoading('Deleting…');
   try {
     const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'delete', date })
+      body: JSON.stringify(payload)
     });
     const result = await r.json();
     if (result.success) {
-      cachedEntries = cachedEntries.filter(e => e.date !== date);
+      if (typeof entry === 'string') {
+        // remove only first match by date (legacy)
+        const idx = cachedEntries.findIndex(e => e.date === entry);
+        if (idx >= 0) cachedEntries.splice(idx, 1);
+      } else {
+        const key = entryKey(entry);
+        cachedEntries = cachedEntries.filter(e => entryKey(e) !== key);
+      }
       return true;
     }
     return false;
@@ -797,7 +817,8 @@ async function submitEntry() {
   const date = document.getElementById('entryDate').value;
   if (!date) { showMsg('submitMsg', 'Please select a date', 'error'); return; }
 
-  const entry = { date, timestamp: new Date().toISOString(), locations: [], grandTotal: 0 };
+  const ts = new Date().toISOString();
+  const entry = { date, timestamp: ts, id: ts, locations: [], grandTotal: 0 };
 
   for (const loc of config.locations) {
     const locData = { name: loc.name, categories: [] };
@@ -846,10 +867,7 @@ async function submitEntry() {
   entry.grandTotal = round(calcTotal);
   entry.grandCL = round(calcCL);
 
-  // Check duplicate
-  const dup = getEntries().find(e => e.date === date);
-  if (dup && !confirm(`Entry for ${date} already exists. Overwrite?`)) return;
-
+  // Same date is allowed — always create a new entry (no overwrite)
   showMsg('submitMsg', 'Saving...', 'success');
   const ok = await saveEntry(entry);
   if (ok) {
@@ -885,16 +903,22 @@ function showHistory() {
     return;
   }
 
-  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  const sorted = [...entries].sort((a, b) => {
+    const dc = b.date.localeCompare(a.date);
+    if (dc !== 0) return dc;
+    return String(b.timestamp || '').localeCompare(String(a.timestamp || ''));
+  });
   let html = `<div class="table-scroll"><table class="tbl"><thead><tr><th>Date</th><th>Submitted</th><th>Grand Total</th><th>Cash Left</th><th>Actions</th></tr></thead><tbody>`;
-  for (const e of sorted) {
+  for (let i = 0; i < sorted.length; i++) {
+    const e = sorted[i];
     const ts = new Date(e.timestamp);
+    const key = entryKey(e).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     html += `<tr>
       <td>${e.date}</td>
       <td>${ts.toLocaleString()}</td>
       <td class="ro">£${(e.grandTotal || 0).toFixed(2)}</td>
       <td class="ro">£${(e.grandCL || 0).toFixed(2)}</td>
-      <td><button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteEntry('${e.date}')">Delete</button></td>
+      <td><button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteEntryByKey('${key}')">Delete</button></td>
     </tr>`;
   }
   html += '</tbody></table></div>';
@@ -906,15 +930,28 @@ function updateHistoryCount() {
   document.getElementById('historyCount').textContent = `${entries.length} entries`;
 }
 
-async function deleteEntry(date) {
-  if (!confirm(`Delete entry for ${date}?`)) return;
-  const ok = await deleteEntryFromSheet(date);
+function findEntryByKey(key) {
+  return getEntries().find(e => entryKey(e) === key);
+}
+
+async function deleteEntryByKey(key) {
+  const entry = findEntryByKey(key);
+  if (!entry) return;
+  if (!confirm(`Delete entry for ${entry.date}?`)) return;
+  const ok = await deleteEntryFromSheet(entry);
   if (!ok) {
-    cachedEntries = cachedEntries.filter(e => e.date !== date);
+    cachedEntries = cachedEntries.filter(e => entryKey(e) !== key);
   }
   showHistory();
   updateHistoryCount();
   render21DayTotals();
+}
+
+async function deleteEntry(date) {
+  // legacy helper — deletes one entry for that date
+  const entry = getEntries().find(e => e.date === date);
+  if (!entry) return;
+  await deleteEntryByKey(entryKey(entry));
 }
 
 function deleteLastSubmission() {
@@ -924,10 +961,10 @@ function deleteLastSubmission() {
     document.getElementById('deleteLastMsg').className = 'msg error';
     return;
   }
-  const last = entries.sort((a, b) => b.date.localeCompare(a.date))[0];
+  const last = [...entries].sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')))[0];
   if (!confirm(`Delete the most recent entry (${last.date})?`)) return;
-  deleteEntryFromSheet(last.date).then(ok => {
-    if (!ok) cachedEntries = cachedEntries.filter(e => e.date !== last.date);
+  deleteEntryFromSheet(last).then(ok => {
+    if (!ok) cachedEntries = cachedEntries.filter(e => entryKey(e) !== entryKey(last));
     const el = document.getElementById('deleteLastMsg');
     el.textContent = `Deleted entry for ${last.date}`;
     el.className = 'msg success';

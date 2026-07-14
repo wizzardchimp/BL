@@ -136,6 +136,8 @@ function readEntriesFromSheet(sheet) {
     if (!entry.locations || !entry.locations.length) {
       if (!entry.grandTotal && !entry.grandCL) continue;
     }
+    // Ensure stable id for duplicate-date rows
+    if (!entry.id) entry.id = entry.timestamp || entry.date;
 
     entries.push(entry);
   }
@@ -318,28 +320,43 @@ function doPost(e) {
     }
 
     if (body.action === 'delete') {
+      // Prefer unique id/timestamp so same-date entries can coexist
+      const targetId = body.id ? String(body.id) : '';
+      const targetTs = body.timestamp ? String(body.timestamp) : '';
+      const targetDate = body.date ? normalizeDate(body.date) : '';
       const ss = getSpreadsheet();
       const skip = {};
       skip[LOG_SHEET_NAME] = true;
       skip[RATES_SHEET_NAME] = true;
-      const targetDate = normalizeDate(body.date);
       const sheets = ss.getSheets();
       for (let s = 0; s < sheets.length; s++) {
         const sheet = sheets[s];
         if (skip[sheet.getName()]) continue;
         const data = sheet.getDataRange().getValues();
+        const display = sheet.getDataRange().getDisplayValues();
         for (let i = data.length - 1; i >= 1; i--) {
-          let rowDateStr = normalizeDate(data[i][0]);
-          if (!rowDateStr) {
+          let entry = null;
+          if (data[i].length > 2) {
+            entry = tryParseEntry(data[i][2]) || tryParseEntry(display[i][2]);
+          }
+          if (!entry) {
             for (let c = 0; c < data[i].length; c++) {
-              const ent = tryParseEntry(data[i][c]);
-              if (ent && ent.date) {
-                rowDateStr = normalizeDate(ent.date);
-                break;
-              }
+              entry = tryParseEntry(data[i][c]) || tryParseEntry(display[i][c]);
+              if (entry) break;
             }
           }
-          if (rowDateStr === targetDate) {
+          if (!entry) continue;
+
+          const rowId = entry.id ? String(entry.id) : '';
+          const rowTs = entry.timestamp ? String(entry.timestamp) : String(data[i][1] || '');
+          const rowDate = normalizeDate(data[i][0] || entry.date);
+
+          let match = false;
+          if (targetId && rowId && rowId === targetId) match = true;
+          else if (targetTs && rowTs && rowTs === targetTs) match = true;
+          else if (!targetId && !targetTs && targetDate && rowDate === targetDate) match = true;
+
+          if (match) {
             sheet.deleteRow(i + 1);
             return ContentService.createTextOutput(JSON.stringify({ success: true }))
               .setMimeType(ContentService.MimeType.JSON);
@@ -360,33 +377,23 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Default: save entry onto Data tab
+    // Default: always APPEND entry (allow multiple entries on same date)
     const sheet = getSheet();
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(['Date', 'Timestamp', 'Data']);
     }
     const date = normalizeDate(body.date);
+    const ts = body.timestamp || new Date().toISOString();
+    const id = body.id || ts;
     const rest = {};
     for (const k in body) {
       if (k !== 'date') rest[k] = body[k];
     }
+    rest.timestamp = ts;
+    rest.id = id;
     const dataStr = JSON.stringify(rest);
-    const existing = sheet.getDataRange().getValues();
-    let updated = false;
-    for (let i = 1; i < existing.length; i++) {
-      const rowDate = normalizeDate(existing[i][0]);
-      if (rowDate === date) {
-        sheet.getRange(i + 1, 1).setValue(date);
-        sheet.getRange(i + 1, 2).setValue(new Date().toISOString());
-        sheet.getRange(i + 1, 3).setValue(dataStr);
-        updated = true;
-        break;
-      }
-    }
-    if (!updated) {
-      sheet.appendRow([date, new Date().toISOString(), dataStr]);
-    }
-    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+    sheet.appendRow([date, ts, dataStr]);
+    return ContentService.createTextOutput(JSON.stringify({ success: true, id: id, timestamp: ts }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
