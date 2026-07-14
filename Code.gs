@@ -131,6 +131,12 @@ function readEntriesFromSheet(sheet) {
       entry.timestamp = new Date().toISOString();
     }
 
+    // Skip non-entry rows (e.g. login events wrongly saved to Data)
+    if (entry.action) continue;
+    if (!entry.locations || !entry.locations.length) {
+      if (!entry.grandTotal && !entry.grandCL) continue;
+    }
+
     entries.push(entry);
   }
   return { entries: entries, parseErrors: parseErrors, rows: lastRow - 1 };

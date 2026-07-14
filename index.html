@@ -494,7 +494,18 @@ function normalizeEntryDate(d) {
   return String(d);
 }
 
+function isValidEntry(e) {
+  if (!e || typeof e !== 'object') return false;
+  if (e.action) return false; // login / other control messages
+  if (!e.date) return false;
+  if (!e.locations || !e.locations.length) {
+    if (!(e.grandTotal > 0) && !(e.grandCL > 0)) return false;
+  }
+  return true;
+}
+
 function migrateEntryLocations() {
+  cachedEntries = (cachedEntries || []).filter(isValidEntry);
   for (const e of cachedEntries) {
     e.date = normalizeEntryDate(e.date);
     for (const loc of e.locations || []) {
