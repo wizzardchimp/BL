@@ -200,6 +200,78 @@ function sheetDiagnostics() {
   return out;
 }
 
+/**
+ * Run once from the Apps Script editor (select cleanupDataSheet → Run)
+ * Removes login/control rows and empty £0 rows from Data (and Sheet1).
+ */
+function cleanupDataSheet() {
+  const ss = getSpreadsheet();
+  const names = [SHEET_NAME].concat(SHEET_FALLBACKS);
+  let totalRemoved = 0;
+  const seen = {};
+  for (let n = 0; n < names.length; n++) {
+    const name = names[n];
+    if (seen[name]) continue;
+    seen[name] = true;
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) continue;
+    totalRemoved += cleanupSheetRows_(sheet);
+  }
+  Logger.log('Removed ' + totalRemoved + ' junk row(s)');
+  return { success: true, removed: totalRemoved };
+}
+
+function cleanupSheetRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  if (lastRow < 2) return 0;
+
+  const data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const display = sheet.getRange(1, 1, lastRow, lastCol).getDisplayValues();
+  let removed = 0;
+
+  // Delete from bottom so row indexes stay valid
+  for (let i = data.length - 1; i >= 1; i--) {
+    const row = data[i];
+    let entry = null;
+    if (row.length > 2) {
+      entry = tryParseEntry(row[2]) || tryParseEntry(display[i][2]);
+    }
+    if (!entry) {
+      for (let c = 0; c < row.length; c++) {
+        entry = tryParseEntry(row[c]) || tryParseEntry(display[i][c]);
+        if (entry) break;
+      }
+    }
+
+    let junk = false;
+    if (entry) {
+      if (entry.action) junk = true;
+      else if (!entry.locations || !entry.locations.length) {
+        if (!entry.grandTotal && !entry.grandCL) junk = true;
+      }
+    } else {
+      // Non-empty row with no parseable JSON
+      const nonempty = row.some(function (v) { return v !== '' && v !== null; });
+      if (nonempty) {
+        // Keep header-like rows; remove pure timestamp-only leftovers if col C empty
+        const hasDate = row[0] !== '' && row[0] !== null;
+        const hasJson = false;
+        if (hasDate && !hasJson && (row[2] === '' || row[2] === null)) {
+          // leave normal empty template rows alone only if entirely empty after col A/B
+          // Don't delete unknown non-JSON data blindly
+        }
+      }
+    }
+
+    if (junk) {
+      sheet.deleteRow(i + 1);
+      removed++;
+    }
+  }
+  return removed;
+}
+
 function doGet(e) {
   const params = (e && e.parameter) ? e.parameter : {};
   if (params.debug === '1') {
@@ -236,6 +308,12 @@ function doPost(e) {
       }
       writeConfig(body.config);
       return ContentService.createTextOutput(JSON.stringify({ success: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (body.action === 'cleanup') {
+      const result = cleanupDataSheet();
+      return ContentService.createTextOutput(JSON.stringify(result))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
