@@ -529,6 +529,18 @@ function renderForm() {
   container.innerHTML = html;
 }
 
+function calcPoolSplit(poolGross, locName) {
+  const gross = parseFloat(poolGross) || 0;
+  if (gross <= 0) return { poolSS: 0, poolCL: 0 };
+  const cfg = config.locations.find(l => l.name === locName);
+  const rent = cfg?.poolRent || 0;
+  if (rent > 0) {
+    const poolSS = Math.min(rent, gross);
+    return { poolSS, poolCL: gross - poolSS };
+  }
+  return { poolSS: gross * 0.5, poolCL: gross * 0.5 };
+}
+
 function render21DayTotals() {
   const entries = getEntries();
   const cutoff = new Date();
@@ -551,19 +563,21 @@ function render21DayTotals() {
         t.mgd += cash * 0.2;
         t.ss += (cat.supplierShare || 0);
         t.cl += (cat.cashLeft || 0);
-        if (cat.poolGross) {
-          const poolSS = cat.poolSS || (cat.pool50 || 0);
-          const poolCL = cat.poolCL || (cat.poolGross - poolSS);
+        // Old format: pool on category
+        if (cat.poolGross && !loc.poolGross) {
+          const { poolSS, poolCL } = calcPoolSplit(cat.poolGross, loc.name);
           t.ss += poolSS;
           t.cl += poolCL;
           t.pool += cat.poolGross;
           t.total += cat.poolGross;
         }
       }
+      // New format: pool on location — always recalculate split from config
       if (loc.poolGross) {
+        const { poolSS, poolCL } = calcPoolSplit(loc.poolGross, loc.name);
         t.pool += loc.poolGross;
-        t.ss += (loc.poolSS || 0);
-        t.cl += (loc.poolCL || 0);
+        t.ss += poolSS;
+        t.cl += poolCL;
         t.total += loc.poolGross;
       }
     }
@@ -858,9 +872,8 @@ function showMonthlySummary() {
         if (!catBreakdown[loc.name][cat.name]) catBreakdown[loc.name][cat.name] = 0;
         catBreakdown[loc.name][cat.name] += cash;
 
-        if (cat.poolGross) {
-          const poolSS = cat.poolSS || (cat.pool50 || 0);
-          const poolCL = cat.poolCL || (cat.poolGross - poolSS);
+        if (cat.poolGross && !loc.poolGross) {
+          const { poolSS, poolCL } = calcPoolSplit(cat.poolGross, loc.name);
           locTotals[loc.name].ss += poolSS;
           locTotals[loc.name].cl += poolCL;
           locTotals[loc.name].pool += cat.poolGross;
@@ -868,10 +881,11 @@ function showMonthlySummary() {
           catBreakdown[loc.name]['Pool'] += cat.poolGross;
         }
       }
-      // Location-level pool (new format)
+      // Location-level pool (new format) — recalculate split from config
       if (loc.poolGross) {
-        locTotals[loc.name].ss += (loc.poolSS || 0);
-        locTotals[loc.name].cl += (loc.poolCL || 0);
+        const { poolSS, poolCL } = calcPoolSplit(loc.poolGross, loc.name);
+        locTotals[loc.name].ss += poolSS;
+        locTotals[loc.name].cl += poolCL;
         locTotals[loc.name].pool += loc.poolGross;
         if (!catBreakdown[loc.name]['Pool']) catBreakdown[loc.name]['Pool'] = 0;
         catBreakdown[loc.name]['Pool'] += loc.poolGross;
@@ -943,12 +957,11 @@ function showMonthlySummary() {
     for (const loc of e.locations || []) {
       for (const cat of loc.categories || []) {
         entrySS += (cat.supplierShare || 0);
-        if (cat.poolGross) {
-          const poolSS = cat.poolSS || (cat.pool50 || 0);
-          entrySS += poolSS;
+        if (cat.poolGross && !loc.poolGross) {
+          entrySS += calcPoolSplit(cat.poolGross, loc.name).poolSS;
         }
       }
-      if (loc.poolSS) entrySS += loc.poolSS;
+      if (loc.poolGross) entrySS += calcPoolSplit(loc.poolGross, loc.name).poolSS;
     }
     monthlyMap[m].ss += entrySS;
     monthlyMap[m].count++;
@@ -1177,9 +1190,8 @@ function viewLocationTotals(locName) {
       monthData[m].mgd += cash * 0.2;
       monthData[m].ss += (cat.supplierShare || 0);
       monthData[m].cl += (cat.cashLeft || 0);
-      if (cat.poolGross) {
-        const poolSS = cat.poolSS || (cat.pool50 || 0);
-        const poolCL = cat.poolCL || (cat.poolGross - poolSS);
+      if (cat.poolGross && !loc.poolGross) {
+        const { poolSS, poolCL } = calcPoolSplit(cat.poolGross, loc.name);
         monthData[m].ss += poolSS;
         monthData[m].cl += poolCL;
         monthData[m].pool += cat.poolGross;
@@ -1187,8 +1199,9 @@ function viewLocationTotals(locName) {
       }
     }
     if (loc.poolGross) {
-      monthData[m].ss += (loc.poolSS || 0);
-      monthData[m].cl += (loc.poolCL || 0);
+      const { poolSS, poolCL } = calcPoolSplit(loc.poolGross, loc.name);
+      monthData[m].ss += poolSS;
+      monthData[m].cl += poolCL;
       monthData[m].pool += loc.poolGross;
       monthData[m].total += loc.poolGross;
     }
