@@ -345,7 +345,7 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
   </div>
 
   <h2>Revenue Split Rates</h2>
-  <p style="font-size:13px;color:#888;margin-bottom:12px;">Configure per location and category.</p>
+  <p style="font-size:13px;color:#888;margin-bottom:12px;">Configure per location and category. Saved to Google Sheet tab <strong>Rates</strong> (synced across devices).</p>
   <div id="settingsContainer" class="settings-grid"></div>
   <div style="margin-top:16px;">
     <button class="btn btn-primary" onclick="saveSettings()">Save Rates</button>
@@ -391,41 +391,72 @@ const DEFAULT_CONFIG = {
 
 let config;
 
+function migrateConfig(cfg) {
+  for (const loc of cfg.locations || []) {
+    if (LOCATION_RENAME[loc.name]) loc.name = LOCATION_RENAME[loc.name];
+    if (!('hasPool' in loc)) {
+      const poolCat = (loc.categories || []).find(c => c.hasPool);
+      if (poolCat) {
+        loc.hasPool = true;
+        loc.poolRent = poolCat.poolRent || 0;
+        delete poolCat.hasPool;
+        delete poolCat.poolRent;
+      }
+    }
+    // Albert S: Reels + Digital → Digital 1 + Digital 2 at 50/50
+    if (loc.name === 'Albert S') {
+      const names = (loc.categories || []).map(c => c.name).join(',');
+      if (names !== 'Digital 1,Digital 2') {
+        loc.categories = [
+          { name: 'Digital 1', rate: 0.5 },
+          { name: 'Digital 2', rate: 0.5 }
+        ];
+      }
+    }
+  }
+  return cfg;
+}
+
 function loadConfig() {
   const saved = localStorage.getItem('list_config');
   if (saved) {
-    config = JSON.parse(saved);
-    // Migrate old configs: move hasPool/poolRent from category to location
-    for (const loc of config.locations) {
-      if (LOCATION_RENAME[loc.name]) loc.name = LOCATION_RENAME[loc.name];
-      if (!('hasPool' in loc)) {
-        const poolCat = loc.categories.find(c => c.hasPool);
-        if (poolCat) {
-          loc.hasPool = true;
-          loc.poolRent = poolCat.poolRent || 0;
-          delete poolCat.hasPool;
-          delete poolCat.poolRent;
-        }
-      }
-      // Albert S: Reels + Digital → Digital 1 + Digital 2 at 50/50
-      if (loc.name === 'Albert S') {
-        const names = (loc.categories || []).map(c => c.name).join(',');
-        if (names !== 'Digital 1,Digital 2') {
-          loc.categories = [
-            { name: 'Digital 1', rate: 0.5 },
-            { name: 'Digital 2', rate: 0.5 }
-          ];
-        }
-      }
-    }
-    saveConfig();
+    config = migrateConfig(JSON.parse(saved));
+    saveConfigLocal();
   } else {
     config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
 }
 
-function saveConfig() {
+function saveConfigLocal() {
   localStorage.setItem('list_config', JSON.stringify(config));
+}
+
+function applyRemoteConfig(remote) {
+  if (!remote || !remote.locations || !Array.isArray(remote.locations)) return false;
+  config = migrateConfig(JSON.parse(JSON.stringify(remote)));
+  saveConfigLocal();
+  return true;
+}
+
+async function saveConfigToSheet(opts) {
+  const url = getApiUrl();
+  if (!url) return false;
+  const silent = opts && opts.silent;
+  if (!silent) showLoading('Saving rates…');
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveConfig', config })
+    });
+    const result = await r.json();
+    return !!result.success;
+  } catch (e) {
+    console.error('Failed to save config:', e);
+    return false;
+  } finally {
+    if (!silent) hideLoading();
+  }
 }
 
 function getDateStr(d) {
@@ -482,7 +513,21 @@ async function loadEntries() {
   showLoading('Loading data…');
   try {
     const r = await fetch(url);
-    cachedEntries = await r.json();
+    const data = await r.json();
+    // Support both legacy array response and { entries, config }
+    if (Array.isArray(data)) {
+      cachedEntries = data;
+    } else {
+      cachedEntries = data.entries || [];
+      if (data.config) {
+        applyRemoteConfig(data.config);
+        renderForm();
+        render21DayTotals();
+      } else if (config) {
+        // Sheet has no Rates yet — seed defaults from this device
+        await saveConfigToSheet({ silent: true });
+      }
+    }
     migrateEntryLocations();
     entriesLoaded = true;
     return cachedEntries;
@@ -1081,6 +1126,8 @@ function saveApiUrl() {
   loadEntries().then(() => {
     updateHistoryCount();
     showHistory();
+    renderForm();
+    render21DayTotals();
   });
 }
 
@@ -1097,12 +1144,23 @@ function updatePoolRent(locName, val) {
   if (loc) loc.poolRent = parseFloat(val) || 0;
 }
 
-function saveSettings() {
-  saveConfig();
-  document.getElementById('settingsMsg').textContent = 'Settings saved!';
-  document.getElementById('settingsMsg').className = 'msg success';
-  setTimeout(() => document.getElementById('settingsMsg').className = 'msg', 2000);
+async function saveSettings() {
+  saveConfigLocal();
+  const ok = await saveConfigToSheet();
+  const el = document.getElementById('settingsMsg');
+  if (ok) {
+    el.textContent = 'Rates saved to Google Sheet!';
+    el.className = 'msg success';
+  } else if (!getApiUrl()) {
+    el.textContent = 'Saved locally only — set API URL to sync rates.';
+    el.className = 'msg error';
+  } else {
+    el.textContent = 'Saved locally; sheet sync failed. Redeploy Code.gs?';
+    el.className = 'msg error';
+  }
+  setTimeout(() => el.className = 'msg', 4000);
   renderForm();
+  render21DayTotals();
 }
 
 // ===== EXPORT =====
