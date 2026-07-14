@@ -229,6 +229,37 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 }
 .login-box input:focus { border-color: #667eea; }
 .login-error { color: #e74c3c; font-size: 12px; margin-top: 8px; display: none; }
+
+.loading-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 12, 41, 0.55);
+  z-index: 9000;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  gap: 14px;
+  backdrop-filter: blur(2px);
+}
+.loading-overlay.active { display: flex; }
+.loading-spinner {
+  width: 44px;
+  height: 44px;
+  border: 4px solid rgba(255,255,255,0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+.loading-text {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>
 </head>
 <body>
@@ -244,6 +275,11 @@ h2 { font-size: 15px; margin: 12px 0 6px; color: #16213e; }
 </div>
 
 <script>if(sessionStorage.getItem('list_logged_in'))document.getElementById('loginOverlay').classList.add('hidden')</script>
+
+<div id="loadingOverlay" class="loading-overlay" aria-live="polite" aria-busy="false">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loadingText">Loading…</div>
+</div>
 
 <div class="nav">
   <a class="active" onclick="showPage('entry')">Daily Entry</a>
@@ -411,9 +447,28 @@ function migrateEntryLocations() {
   }
 }
 
+function showLoading(msg) {
+  const el = document.getElementById('loadingOverlay');
+  const txt = document.getElementById('loadingText');
+  if (txt) txt.textContent = msg || 'Loading…';
+  if (el) {
+    el.classList.add('active');
+    el.setAttribute('aria-busy', 'true');
+  }
+}
+
+function hideLoading() {
+  const el = document.getElementById('loadingOverlay');
+  if (el) {
+    el.classList.remove('active');
+    el.setAttribute('aria-busy', 'false');
+  }
+}
+
 async function loadEntries() {
   const url = getApiUrl();
   if (!url) { cachedEntries = []; entriesLoaded = true; return []; }
+  showLoading('Loading data…');
   try {
     const r = await fetch(url);
     cachedEntries = await r.json();
@@ -425,6 +480,8 @@ async function loadEntries() {
     cachedEntries = [];
     entriesLoaded = true;
     return [];
+  } finally {
+    hideLoading();
   }
 }
 
@@ -435,6 +492,7 @@ function getEntries() {
 async function saveEntry(entry) {
   const url = getApiUrl();
   if (!url) { showMsg('submitMsg', 'No API URL set — go to Settings', 'error'); return false; }
+  showLoading('Saving…');
   try {
     const r = await fetch(url, {
       method: 'POST',
@@ -452,6 +510,8 @@ async function saveEntry(entry) {
   } catch(e) {
     console.error('Failed to save entry:', e);
     return false;
+  } finally {
+    hideLoading();
   }
 }
 
@@ -459,6 +519,7 @@ async function deleteEntryFromSheet(date) {
   // For delete, we POST with a special action
   const url = getApiUrl();
   if (!url) return false;
+  showLoading('Deleting…');
   try {
     const r = await fetch(url, {
       method: 'POST',
@@ -474,6 +535,8 @@ async function deleteEntryFromSheet(date) {
   } catch(e) {
     console.error('Failed to delete entry:', e);
     return false;
+  } finally {
+    hideLoading();
   }
 }
 
@@ -797,6 +860,7 @@ async function clearHistory() {
   if (!confirm('Delete ALL entries?')) return;
   const url = getApiUrl();
   if (url) {
+    showLoading('Clearing…');
     try {
       await fetch(url, {
         method: 'POST',
@@ -804,6 +868,7 @@ async function clearHistory() {
         body: JSON.stringify({ action: 'clear' })
       });
     } catch(e) {}
+    finally { hideLoading(); }
   }
   cachedEntries = [];
   showHistory();
