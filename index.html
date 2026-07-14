@@ -365,8 +365,8 @@ const DEFAULT_CONFIG = {
     },
     {
       name: 'Albert S', categories: [
-        { name: 'Reels', rate: 0.6 },
-        { name: 'Digital', rate: 0.5 }
+        { name: 'Digital 1', rate: 0.5 },
+        { name: 'Digital 2', rate: 0.5 }
       ]
     },
     {
@@ -407,7 +407,18 @@ function loadConfig() {
           delete poolCat.poolRent;
         }
       }
+      // Albert S: Reels + Digital → Digital 1 + Digital 2 at 50/50
+      if (loc.name === 'Albert S') {
+        const names = (loc.categories || []).map(c => c.name).join(',');
+        if (names !== 'Digital 1,Digital 2') {
+          loc.categories = [
+            { name: 'Digital 1', rate: 0.5 },
+            { name: 'Digital 2', rate: 0.5 }
+          ];
+        }
+      }
     }
+    saveConfig();
   } else {
     config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
