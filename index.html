@@ -583,16 +583,16 @@ function render21DayTotals() {
     }
   }
 
-  let html = `<div class="table-scroll"><table class="tbl"><thead><tr><th colspan="6" style="background:#1a1a2e;">Last 21 Days — Totals</th></tr>
-    <tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th><th>Pool Gross</th></tr></thead><tbody>`;
-  let grandTotal = 0, grandMGD = 0, grandSS = 0, grandCL = 0, grandPool = 0;
+  let html = `<div class="table-scroll"><table class="tbl"><thead><tr><th colspan="5" style="background:#1a1a2e;">Last 21 Days — Totals</th></tr>
+    <tr><th>Location</th><th>Total</th><th>MGD</th><th>Supplier Share</th><th>Cash Left</th></tr></thead><tbody>`;
+  let grandTotal = 0, grandMGD = 0, grandSS = 0, grandCL = 0;
   for (const loc of config.locations) {
     const v = locTotals[loc.name];
-    html += `<tr><td>${loc.name}</td><td class="ro">£${v.total.toFixed(2)}</td><td class="ro">£${v.mgd.toFixed(2)}</td><td class="ro">£${v.ss.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td><td class="ro">£${v.pool.toFixed(2)}</td></tr>`;
-    grandTotal += v.total; grandMGD += v.mgd; grandSS += v.ss; grandCL += v.cl; grandPool += v.pool;
+    html += `<tr><td>${loc.name}</td><td class="ro">£${v.total.toFixed(2)}</td><td class="ro">£${v.mgd.toFixed(2)}</td><td class="ro">£${v.ss.toFixed(2)}</td><td class="ro">£${v.cl.toFixed(2)}</td></tr>`;
+    grandTotal += v.total; grandMGD += v.mgd; grandSS += v.ss; grandCL += v.cl;
   }
   html += `<tr style="font-weight:700;background:#f0f2ff;">
-    <td>${recent.length} days</td><td class="ro">£${grandTotal.toFixed(2)}</td><td class="ro">£${grandMGD.toFixed(2)}</td><td class="ro">£${grandSS.toFixed(2)}</td><td class="ro">£${grandCL.toFixed(2)}</td><td class="ro">£${grandPool.toFixed(2)}</td>
+    <td>${recent.length} days</td><td class="ro">£${grandTotal.toFixed(2)}</td><td class="ro">£${grandMGD.toFixed(2)}</td><td class="ro">£${grandSS.toFixed(2)}</td><td class="ro">£${grandCL.toFixed(2)}</td>
   </tr></tbody></table></div>`;
 
   document.getElementById('totals21Container').innerHTML = html;
